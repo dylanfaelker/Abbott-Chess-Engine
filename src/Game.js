@@ -481,7 +481,7 @@ class Game extends React.Component {
           id:0,
           squareColor:true,
           piece: 0,
-          pieceColor: true,
+          pieceColor: '',
           icon: '',
         }
       ],
@@ -509,7 +509,7 @@ class Game extends React.Component {
         id:0,
         squareColor:true,
         piece: 0,
-        pieceColor: true,
+        pieceColor: '',
         icon: '',
       },
     }
@@ -531,7 +531,7 @@ class Game extends React.Component {
   //called when a piece is being moved to a legal square
   //updates the board and game state variables
   makeMove(square) {
-    // console.log(evaluatePos(this.state.squares, this.state.castling, this.state.enpassent, this.state.turn))
+    console.log(evaluatePos(this.state.squares, this.state.castling, this.state.enpassent, this.state.turn))
 
     //------updating board, and game states other than those which singify the end of the game------
     if (isEnpassent(square, this.state.selectedPiece[1])) {//for enpassent moves
@@ -918,7 +918,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: true,
+              pieceColor: '',
               icon: '',
             }
           })
@@ -980,7 +980,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: true,
+              pieceColor: '',
               icon: '',
             }
           })
@@ -1042,7 +1042,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: true,
+              pieceColor: '',
               icon: '',
             }
           })
@@ -1104,7 +1104,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: true,
+              pieceColor: '',
               icon: '',
             }
           })
@@ -1169,7 +1169,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: true,
+              pieceColor: '',
               icon: '',
             }
           })
@@ -1231,7 +1231,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: true,
+              pieceColor: '',
               icon: '',
             }
           })
@@ -1293,7 +1293,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: true,
+              pieceColor: '',
               icon: '',
             }
           })
@@ -1355,7 +1355,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: true,
+              pieceColor: '',
               icon: '',
             }
           })
@@ -1460,7 +1460,7 @@ function evalControl(squares, castling, enpassent, turn) {
   var evaluation = 0
 
   //finds which moves '!turn' can make
-  var oppmoves = []
+  var oppmoves = [37]
   for (const square of squares) {
     if (square.pieceColor === !turn) {
       oppmoves = oppmoves.concat(findControl(square, squares, castling, enpassent))
@@ -1468,7 +1468,7 @@ function evalControl(squares, castling, enpassent, turn) {
   }
 
   //finds which squares 'turn' can make
-  var alymoves = []
+  var alymoves = [29]
   for (const square of squares) {
     if (square.pieceColor === turn) {
       alymoves = alymoves.concat(findControl(square, squares, castling, enpassent))
@@ -1484,16 +1484,19 @@ function evalControl(squares, castling, enpassent, turn) {
   }
   //finds squares near king
   var kmoves = kingControl(getSquare(kpos, squares), squares, castling, enpassent)
+  
 
   //find king safety
   for (const move of kmoves) {
     //level measures how weak the king is
-    let level=0
+    //starts with 1 to counter act king protection of itself
+    let level=1
     level-=numAppears(move, alymoves)
     level+=numAppears(move, oppmoves)
 
     evaluation-=Math.abs(level*levelVal)
   }
+
   //determines control of squares
   alymoves=dedupe(alymoves)
   if(turn) { //white
@@ -1895,7 +1898,7 @@ function rookControl(square, squares, castling, enpassent) {
   }
   //resets the square being checked
   newNum=infinityRight(num+1)
-  while (newNum >= 1 && newNum <= 64 && (getSquare(infinityLeft(newNum-1), squares).pieceColor !== square.pieceColor || getSquare(infinityLeft(newNum-1), squares).piece === 5 || getSquare(infinityLeft(newNum-1), squares).piece === 4) && getSquare(infinityLeft(newNum-1), squares).pieceColor !== !square.pieceColor) {
+  while (newNum >= 1 && newNum <= 64 && (getSquare(infinityLeft(newNum-1), squares).pieceColor !== square.pieceColor || getSquare(infinityLeft(newNum-1), squares).piece === 5 || getSquare(infinityLeft(newNum-1), squares).piece === 4) && getSquare(infinityLeft(newNum-1), squares).pieceColor !== !square.pieceColor && square.id !== newNum) {
     moves.push(newNum)
     newNum=infinityRight(newNum+1)
   }
