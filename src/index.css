@@ -33,6 +33,24 @@ code {
   background-color: #0d2546;
 }
 
+.buttons {
+  margin:1vmin;
+}
+
+.btn {
+  display: inline-block;
+  background: #366BA8;
+  color: #42afb0;
+  border: 5px solid #366BA8;
+  padding: 10px 20px;
+  margin: 5px;
+  border-radius: 5px;
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 15px;
+  font-family: inherit;
+}
+
 .game {
   margin-right: 20vmin;
   margin-left: 20vmin;
