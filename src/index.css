@@ -1,0 +1,108 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-size: calc(4vmin);
+  color: #e1911b;
+  height: 5vmin;
+  margin:2vmin;
+  padding:0;
+}
+
+.App {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center; 
+  background-color: #0d2546;
+}
+
+.game {
+  margin-right: 20vmin;
+  margin-left: 20vmin;
+  margin-bottom: 10vmin;
+}
+
+.board-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center; 
+}
+
+.square-white {
+  min-height: 10vmin;
+  max-height: 10vmin;
+  min-width: 10vmin;
+  max-width: 10vmin;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center; 
+  background-color: #d4b187;
+  border: 1px solid #d4b187;
+}
+
+.square-black {
+  min-height: 10vmin;
+  max-height: 10vmin;
+  min-width: 10vmin;
+  max-width: 10vmin;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center; 
+  background-color: #613d11;
+  border: 1px solid #613d11;
+}
+
+.square-highlight {
+  min-height: 10vmin;
+  max-height: 10vmin;
+  min-width: 10vmin;
+  max-width: 10vmin;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center; 
+  background-color: #308897;
+  border: 1px solid #143b70;
+}
+
+.square-chosen {
+  min-height: 10vmin;
+  max-height: 10vmin;
+  min-width: 10vmin;
+  max-width: 10vmin;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center; 
+  background-color: #d49d06;
+  border: 1px solid #c49411;
+}
+
+.piece-img {
+  min-height: 9vmin;
+  max-height: 9vmin;
+  min-width: 9vmin;
+  max-width: 9vmin;
+}
+
+
