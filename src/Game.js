@@ -531,7 +531,8 @@ class Game extends React.Component {
   //called when a piece is being moved to a legal square
   //updates the board and game state variables
   makeMove(square) {
-    console.log(evaluatePos(this.state.squares, this.state.castling, this.state.enpassent, this.state.turn))
+    // console.log(evaluatePos(this.state.squares, this.state.castling, this.state.enpassent, this.state.turn))
+    console.log(engine(this.state.squares, this.state.castling, this.state.enpassent, this.state.history, this.state.move50, this.state.turn))
 
     //------updating board, and game states other than those which singify the end of the game------
     if (isEnpassent(square, this.state.selectedPiece[1])) {//for enpassent moves
@@ -769,12 +770,13 @@ class Game extends React.Component {
       var newSquares = pretendMove(square, this.state.selectedPiece[1], this.state.squares, this.state.enpassent)
       //determines the new 50 move rule count after the previous is made
       var newMove50 = (square.piece !== 0 || this.state.selectedPiece[1].piece === 1) ? 0 : this.state.move50+0.5
+      var newEnpassent = (Math.abs(square.id-this.state.selectedPiece[1].id)===16 && this.state.selectedPiece[1].piece===1) ? square.id : 0
 
       //determines if the next player has any moves
-      if(isOver(newSquares, !this.state.turn, this.state.castling, this.state.enpassent)) {
+      if(isOver(newSquares, !this.state.turn, this.state.castling, newEnpassent)) {
       
         //determines if it is checkmate or stalemate
-        if (inCheck(newSquares, !this.state.turn, this.state.castling, this.state.enpassent)) {
+        if (inCheck(newSquares, !this.state.turn, this.state.castling, newEnpassent)) {
         //turn wins
         this.setState({ checkmate:true })
         } else {
@@ -1437,8 +1439,127 @@ class Game extends React.Component {
 
 // ***************** Chess Engine ******************
 
+//TODO always check if Over in engine moves and evalPos
+
+function engine(squares, castling, enpassent, history, move50, turn) {
+  let evaluation= engine_moves(squares, castling, enpassent, turn, history, move50, 0, true)
+  console.log('here')
+  return evaluation
+}
+
+function engine_moves(squares, castling, enpassent, turn, history, move50, inFuture, isAly) {
+  const depth = 1
+
+  //base case
+  //when depth is integer, positive numbers are good for aly
+  if(inFuture>=depth) {
+    return evaluatePos(squares, castling, enpassent, turn, history, move50)
+  }
+
+  var scores=[]
+  var best
+
+  //determines if the 'turn' has any moves
+  if(isOver(squares, turn, castling, enpassent)) {
+      
+    //determines if it is checkmate or stalemate
+    if (inCheck(squares, turn, castling, enpassent)) { //checkmate
+      if(isAly){//aly got mated
+        return -Infinity
+      }else{//opp got mated
+        return Infinity
+      }
+    } else { //stalemate
+      return 0
+    }
+  //determines of there is a draw by repitition or 50 move rule
+  } else if(move50===50 || numAppearsBoard(squares, history) >= 2) { //if drawn by other means
+    return 0
+  } else { //if the game is not over
+    //gets all possible moves by 'turn'
+    for (const square of squares) { //loops through all squares in the position looking for pieces of 'turn'
+      if (square.pieceColor === turn) {
+        //gets all moves the piece can make in the position
+        let moves = findMoves(square, squares, castling, enpassent)
+
+        //checks through all the moves and saves best eval in new position
+        for (const move of moves) {
+
+          //must check for different piece that pawn can promote to
+          if(isPromotion(square)) {
+
+            //Note bishop and rook will never be better than queen
+
+            //knight promote
+            let newSquares = pretendPromotion(getSquare(move, squares), square, squares, enpassent, 3)
+            let knightScore = engine_moves(newSquares, castling, 0, !turn, history.concat([squares]), 0, inFuture+0.5, !isAly)
+
+            //queen promote
+            newSquares = pretendPromotion(getSquare(move, squares), square, squares, enpassent, 5)
+            let queenScore = engine_moves(newSquares, castling, 0, !turn, history.concat([squares]), 0, inFuture+0.5, !isAly)
+
+            if(isAly) { //best eval for if aly is making next move
+              scores.push(Math.max( knightScore, queenScore ))
+            } else { //best eval for if opp is making next move
+              scores.push(Math.min( knightScore, queenScore ))
+            }
+
+          } else {
+
+            //stores updated game state: squares, castling, enpassent
+            let gameState=[[], [], 0]
+            gameState=updateGameState(getSquare(move, squares), square, squares, castling, enpassent)
+            let newMove50=(getSquare(move, squares).piece !== 0 || square.piece === 1) ? 0 : move50 + 0.5
+
+            //saves the best evaluation if that move is made
+            scores.push(engine_moves(gameState[0], gameState[1], gameState[2], !turn, history.concat([squares]), newMove50, inFuture+0.5, !isAly))
+
+          }
+        }
+      }
+    }
+
+    //opp will always be trying to make the eval as low as possible and aly will be trying to maximise it
+    //determines which eval is best for 'aly'
+    if(isAly) { //best eval for if aly is making next move
+      best=Math.max(...scores)
+    } else { //best eval for if opp is making next move
+      best=Math.min(...scores)
+    }
+  }
+
+  return best
+}
+
+//updates sqaures, castling and enpassent for a move that was made
+function updateGameState(newSquare, oldSquare, squares, castling, enpassent) {
+
+  var newSquares = pretendMove(newSquare, oldSquare, squares, enpassent)
+  var newEnpassent = (Math.abs(newSquare.id-oldSquare.id)===16 && oldSquare.piece===1) ? newSquare.id : 0
+  var newCastling = changeCastle(oldSquare, newSquare, castling)
+
+  return [newSquares, newCastling, newEnpassent]
+}
+
+
+
+
 //evaluates a position, positive is for who plays next move
-function evaluatePos(squares, castling, enpassent, turn) {
+function evaluatePos(squares, castling, enpassent, turn, history, move50) {
+
+  //determines if the 'turn' has any moves
+  if(isOver(squares, turn, castling, enpassent)) {
+      
+    //determines if it is checkmate or stalemate
+    if (inCheck(squares, turn, castling, enpassent)) { //checkmate
+      return -Infinity
+    } else { //stalemate
+      return 0
+    }
+  //determines of there is a draw by repitition or 50 move rule
+  } else if(move50===50 || numAppearsBoard(squares, history) >= 2) { //if drawn by other means
+    return 0
+  }
 
   //advantage of playing the next move
   var evaluation = 40
@@ -1453,6 +1574,9 @@ function evaluatePos(squares, castling, enpassent, turn) {
 
 //evaluate king safety and control of squares
 function evalControl(squares, castling, enpassent, turn) {
+
+  // console.log(squares)
+
   const levelVal = 25
   const sameSideVale = 10
   const oppSideVal = 20
@@ -1460,7 +1584,7 @@ function evalControl(squares, castling, enpassent, turn) {
   var evaluation = 0
 
   //finds which moves '!turn' can make
-  var oppmoves = [37]
+  var oppmoves = []
   for (const square of squares) {
     if (square.pieceColor === !turn) {
       oppmoves = oppmoves.concat(findControl(square, squares, castling, enpassent))
@@ -1468,7 +1592,7 @@ function evalControl(squares, castling, enpassent, turn) {
   }
 
   //finds which squares 'turn' can make
-  var alymoves = [29]
+  var alymoves = []
   for (const square of squares) {
     if (square.pieceColor === turn) {
       alymoves = alymoves.concat(findControl(square, squares, castling, enpassent))
@@ -1603,6 +1727,8 @@ function numAppears(key, array) {
 function findControl(square, squares, castling, enpassent) {
   var moves=[]
 
+  // console.log(square)
+
   switch(square.piece) {
     case 1: //pawn
       moves=pawnControl(square, squares, castling, enpassent)
@@ -1669,20 +1795,20 @@ function bishopControl(square, squares, castling, enpassent) {
   }
   //resets the square being checked
   newNum=infinityLeft(num-9)
-  while (newNum >= 1 && newNum <= 64 && (getSquare(infinityLeft(newNum+9), squares).pieceColor !== square.pieceColor || getSquare(infinityRight(newNum+9), squares).piece===5 || getSquare(infinityRight(newNum+9), squares).piece===2) && getSquare(infinityRight(newNum+9), squares).pieceColor !== !square.pieceColor) {
+  while (newNum >= 1 && newNum <= 64 && (getSquare(infinityRight(newNum+9), squares).pieceColor !== square.pieceColor || getSquare(infinityRight(newNum+9), squares).piece===5 || getSquare(infinityRight(newNum+9), squares).piece===2) && getSquare(infinityRight(newNum+9), squares).pieceColor !== !square.pieceColor) {
     moves.push(newNum)
     newNum=infinityLeft(newNum-9)
   }
-  if(getSquare(infinityLeft(newNum+9), squares).piece===1 && square.pieceColor) {
+  if(getSquare(infinityRight(newNum+9), squares).piece===1 && square.pieceColor) {
     moves.push(newNum)
   }
   //resets the square being checked
   newNum=infinityLeft(num+7)
-  while (newNum >= 1 && newNum <= 64 && (getSquare(infinityLeft(newNum-7), squares).pieceColor !== square.pieceColor || getSquare(infinityLeft(newNum-7), squares).piece===5 || getSquare(infinityLeft(newNum-7), squares).piece===2) && getSquare(infinityRight(newNum-7), squares).pieceColor !== !square.pieceColor) {
+  while (newNum >= 1 && newNum <= 64 && (getSquare(infinityRight(newNum-7), squares).pieceColor !== square.pieceColor || getSquare(infinityRight(newNum-7), squares).piece===5 || getSquare(infinityRight(newNum-7), squares).piece===2) && getSquare(infinityRight(newNum-7), squares).pieceColor !== !square.pieceColor) {
     moves.push(newNum)
     newNum=infinityLeft(newNum+7)
   }
-  if(getSquare(infinityLeft(newNum-7), squares).piece===1 && !square.pieceColor) {
+  if(getSquare(infinityRight(newNum-7), squares).piece===1 && !square.pieceColor) {
     moves.push(newNum)
   }
   //resets the square being checked
@@ -2305,7 +2431,7 @@ function testMove(newSquare, oldSquare, squares, castling, enpassent, turn) {
   return !inCheckSafe(newSquares, turn, newCastling, newEnpassent)
 }
 
-//returns a board with a move actually made
+//returns a board with a move actually made, no promotion though
 function pretendMove(newSquare, oldSquare, squares, enpassent) {
   var newSquares
 
