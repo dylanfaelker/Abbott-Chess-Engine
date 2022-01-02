@@ -1,12 +1,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
-import Game_engine from './Game_engine';
+import App from './App';
 import reportWebVitals from './reportWebVitals';
 
 ReactDOM.render(
   <React.StrictMode>
-    <Game_engine />
+    <App />
   </React.StrictMode>,
   document.getElementById('root')
 );

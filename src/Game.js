@@ -481,7 +481,7 @@ class Game extends React.Component {
           id:0,
           squareColor:true,
           piece: 0,
-          pieceColor: '',
+          pieceColor: true,
           icon: '',
         }
       ],
@@ -509,9 +509,10 @@ class Game extends React.Component {
         id:0,
         squareColor:true,
         piece: 0,
-        pieceColor: '',
+        pieceColor: true,
         icon: '',
       },
+
     }
   }
 
@@ -521,20 +522,16 @@ class Game extends React.Component {
   //called when a square has been clicked on
   //determines if the game is still being played and if the user is trying to make a move or select a piece
   selecting(square) {
-    if(this.state.turn) {
-      (this.state.promoting ?
-        (this.nothing()) : //random function that does actually nothin
-        ((this.state.checkmate || this.state.stalemate || this.state.draw) ? 
-          this.unselect() :
-          (this.state.selectedPiece[0] ? this.checkMove(square) : this.pickPiece(square))))
-    }
+    (this.state.promoting ?
+      (this.nothing()) : //random function that does actually nothin
+      ((this.state.checkmate || this.state.stalemate || this.state.draw) ? 
+        this.unselect() :
+        (this.state.selectedPiece[0] ? this.checkMove(square) : this.pickPiece(square))))
   }
 
   //called when a piece is being moved to a legal square
   //updates the board and game state variables
   makeMove(square) {
-    // console.log(evaluatePos(this.state.squares, this.state.castling, this.state.enpassent, this.state.turn))
-    // console.log(engine_moves(this.state.squares, this.state.castling, this.state.enpassent, this.state.turn, this.state.history, this.state.move50, 0, true))
 
     //------updating board, and game states other than those which singify the end of the game------
     if (isEnpassent(square, this.state.selectedPiece[1])) {//for enpassent moves
@@ -709,7 +706,7 @@ class Game extends React.Component {
         piece: square.piece,
         pieceColor: square.pieceColor,
         icon: square.icon,
-      }}) 
+      }})
     } else {//for normal moves
       this.setState({
         //adds the previous position to the history
@@ -766,19 +763,17 @@ class Game extends React.Component {
     }
 
     //------updates the game ending game states------
-
     if(!isPromotion(this.state.selectedPiece[1])) {
       //makes a new board where the move is made and able to be used
       var newSquares = pretendMove(square, this.state.selectedPiece[1], this.state.squares, this.state.enpassent)
       //determines the new 50 move rule count after the previous is made
       var newMove50 = (square.piece !== 0 || this.state.selectedPiece[1].piece === 1) ? 0 : this.state.move50+0.5
-      var newEnpassent = (Math.abs(square.id-this.state.selectedPiece[1].id)===16 && this.state.selectedPiece[1].piece===1) ? square.id : 0
 
       //determines if the next player has any moves
-      if(isOver(newSquares, !this.state.turn, this.state.castling, newEnpassent)) {
+      if(isOver(newSquares, !this.state.turn, this.state.castling, this.state.enpassent)) {
       
         //determines if it is checkmate or stalemate
-        if (inCheck(newSquares, !this.state.turn, this.state.castling, newEnpassent)) {
+        if (inCheck(newSquares, !this.state.turn, this.state.castling, this.state.enpassent)) {
         //turn wins
         this.setState({ checkmate:true })
         } else {
@@ -786,14 +781,9 @@ class Game extends React.Component {
         this.setState({ stalemate:true })
         }
       //determines of there is a draw by repitition or 50 move rule
-      } else if(newMove50===50 || numAppearsBoard(newSquares, this.state.history) >= 2) {
+      } else if(newMove50===50 || numAppears(newSquares, this.state.history) >= 2) {
         this.setState({ draw:true })
       }
-
-      var newCastling = changeCastle(this.state.selectedPiece[1], square, this.state.castling)
-      var newHistory = this.state.history.concat([this.state.squares])
-      //bot makes move
-      this.botMove(newSquares, newCastling, newEnpassent, newHistory, newMove50, !this.state.turn)
     }
   }
 
@@ -927,7 +917,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: '',
+              pieceColor: true,
               icon: '',
             }
           })
@@ -989,7 +979,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: '',
+              pieceColor: true,
               icon: '',
             }
           })
@@ -1051,7 +1041,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: '',
+              pieceColor: true,
               icon: '',
             }
           })
@@ -1113,7 +1103,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: '',
+              pieceColor: true,
               icon: '',
             }
           })
@@ -1178,7 +1168,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: '',
+              pieceColor: true,
               icon: '',
             }
           })
@@ -1240,7 +1230,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: '',
+              pieceColor: true,
               icon: '',
             }
           })
@@ -1302,7 +1292,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: '',
+              pieceColor: true,
               icon: '',
             }
           })
@@ -1364,7 +1354,7 @@ class Game extends React.Component {
               id:0,
               squareColor:true,
               piece: 0,
-              pieceColor: '',
+              pieceColor: true,
               icon: '',
             }
           })
@@ -1373,12 +1363,13 @@ class Game extends React.Component {
     }
 
     //----------updates game ending states -------------
+
     //makes a new board where the move is made and able to be used
     var newSquares = pretendPromotion(this.state.promoteSavedSquare, this.state.selectedPiece[1], this.state.squares, this.state.enpassent, piece)
 
     //determines if the next player has any moves
     if(isOver(newSquares, !this.state.turn, this.state.castling, this.state.enpassent)) {
-
+    
       //determines if it is checkmate or stalemate
       if (inCheck(newSquares, !this.state.turn, this.state.castling, this.state.enpassent)) {
       //turn wins
@@ -1388,21 +1379,15 @@ class Game extends React.Component {
       this.setState({ stalemate:true })
       }
 
-      //Note: you cant reach a draw after promoting because you mved a pawn and you couldnt have reached an old position
+      //Note: you can reach a draw after promoting because you mved a pawn and you couldnt have reached an old position
     }
-
-    var newMove50 = 0
-    var newEnpassent = 0
-    var newCastling = this.state.castling
-    var newHistory = this.state.history.concat([this.state.squares])
-    this.botMove(newSquares, newCastling, newEnpassent, newHistory, newMove50, !this.state.turn)
   }
 
   render() {
     return (
       <div className='App'>
         {/*determines what to display above the board: will say whos turn or the result of the game */}
-        <h1 className='header'>{this.state.draw ? 'Draw' : (this.state.checkmate ? 'Checkmate!' : (this.state.stalemate ? 'Stalemate' : (this.state.turn ? 'White\'s Turn' : 'Black\'s Turn')))}</h1>
+        <h1 className='game-info'>{this.state.draw ? 'Draw' : (this.state.checkmate ? 'Checkmate!' : (this.state.stalemate ? 'Stalemate' : (this.state.turn ? 'White\'s Turn' : 'Black\'s Turn')))}</h1>
         
         {/* Promotion buttons which appear only when promoting */}
         {this.state.promoting ? 
@@ -1432,7 +1417,7 @@ class Game extends React.Component {
               {'Bishop'}
             </button>
           </div> : <div></div>} 
-
+        
         <div className="game">
           <Board 
             //data about each square
@@ -1448,1081 +1433,10 @@ class Game extends React.Component {
       </div>
     );
   }
-
-  componentDidUpdate(prevProps, prevState) {
-    //blacks turn an the game isnt over
-    if(!this.state.turn && !this.state.checkmate && !this.state.stalemate && !this.state.draw && false) {
-      this.botMove(this.state.squares, this.state.castling, this.state.enpassent, this.state.history, this.state.move50, this.state.turn)
-    }
-  }
-
-  botMove(squares, castling, enpassent, history, move50, turn){
-    //blacks turn an the game isnt over
-    var move = engine(squares, castling, enpassent, history, move50, turn)
-
-
-    //------updating board, and game states other than those which singify the end of the game------
-    if (isEnpassent(move[0], move[1])) {//for enpassent moves
-      this.setState({
-        //adds the previous position to the history
-        history:history.concat([squares]),
-        //updates the board
-        squares: squares.map((squareCheck) => {
-          if (squareCheck.id === move[0].id) { //moves the piece to the new square
-            return {
-              id:move[0].id,
-              squareColor:move[0].squareColor,
-              piece: move[0].piece,
-              pieceColor: move[0].pieceColor,
-              icon: move[0].icon,
-            }
-          } else if  (squareCheck.id === move[1].id) { //resets the square the piece is moving from
-            return {
-              id:squareCheck.id,
-              squareColor:squareCheck.squareColor,
-              piece: 0,
-              pieceColor: '',
-              icon: '',
-            }
-          } else if (squareCheck.id === enpassent) { //deletes the pawn on enpassent square
-            return {
-              id:squareCheck.id,
-              squareColor:squareCheck.squareColor,
-              piece: 0,
-              pieceColor: '',
-              icon: '',
-            }
-          } else { //stays the same if the square is unaffected by the move
-            return {
-              id:squareCheck.id,
-              squareColor:squareCheck.squareColor,
-              piece: squareCheck.piece,
-              pieceColor: squareCheck.pieceColor,
-              icon: squareCheck.icon,
-            }
-          }
-        }),
-        //unselectes the piece
-        selectedPiece:[false, 
-          {
-            id:0,
-            squareColor:true,
-            piece: 0,
-            pieceColor: '',
-            icon: '',
-          }
-        ],
-        //removes all move possibilities since no piece is selected
-        moves:[],
-        //makes it the pther players turn
-        turn:!turn,
-        //resets enpassent since a pawn couldnt have moved up 2 squares
-        enpassent: 0,
-        //resets 50 move rule since a pawn was moved and piece was taken
-        move50: 0,
-      })
-    } else if(isCastle(move[0], move[1])) { //for castling
-
-      //variable to store the id of the square the piece is currently on
-      var num=move[1].id
-
-      //initilaizes ids for where the rook is moving
-      var oldId
-      var newId
-      //determiens the ids of the rook movements 
-      if(move[1].pieceColor && num+2 === move[0].id) { //white castle short
-        newId=62
-        oldId=64
-      } else if(move[1].pieceColor && num-2 === move[0].id) {  //white castle long
-        newId=60
-        oldId=57
-      } else if(!move[1].pieceColor && num+2 === move[0].id) { //black castle short
-        newId=6
-        oldId=8
-      } else { //black castle long
-        newId=4
-        oldId=1
-      }
-
-      //creates sqaure to identity which square on the board matchs it when moving the pieces
-      //only the id is needed for the one
-      var newRook = {
-        id:newId
-      }
-      //creates sqaure to identity which square on the board matchs it when moving the pieces
-      var oldRook = {
-        id:oldId,
-        squareColor:getSquare(oldId, squares).squareColor,
-        piece: getSquare(oldId, squares).piece,
-        pieceColor: getSquare(oldId, squares).pieceColor,
-        icon: getSquare(oldId, squares).icon,
-      }
-
-      this.setState({
-        //adds the previous position to the history
-        history:history.concat([squares]),
-        //makes the appropriate teams castling rights false
-        castling: move[1].pieceColor ? [false, false, castling[2], castling[3]] : [castling[0], castling[1], false, false],
-        enpassent: 0,
-        //updates the board
-        squares: squares.map((squareCheck) => {
-          if (squareCheck.id === move[0].id) { //moves the king to the new square
-            return {
-              id:squareCheck.id,
-              squareColor:squareCheck.squareColor,
-              piece: move[1].piece,
-              pieceColor: move[1].pieceColor,
-              icon: move[1].icon,
-            }
-          } else if  (squareCheck.id === move[1].id) {//resets the square the king is moving from
-            return {
-              id:squareCheck.id,
-              squareColor:squareCheck.squareColor,
-              piece: 0,
-              pieceColor: '',
-              icon: '',
-            }
-          } else if(squareCheck.id === oldRook.id) { //resets the square the rook is moving from
-            return {
-              id:squareCheck.id,
-              squareColor:squareCheck.squareColor,
-              piece: 0,
-              pieceColor: '',
-              icon: '',
-            }
-          } else if(squareCheck.id === newRook.id) { //moves the rook to the new square
-            return {
-              id:squareCheck.id,
-              squareColor:squareCheck.squareColor,
-              piece: oldRook.piece,
-              pieceColor: oldRook.pieceColor,
-              icon: oldRook.icon,
-            }
-          } else {//stays the same if the square is unaffected by the move
-            return {
-              id:squareCheck.id,
-              squareColor:squareCheck.squareColor,
-              piece: squareCheck.piece,
-              pieceColor: squareCheck.pieceColor,
-              icon: squareCheck.icon,
-            }
-          }
-        }),
-        //unselectes the king
-        selectedPiece:[false, 
-          {
-            id:0,
-            squareColor:true,
-            piece: 0,
-            pieceColor: '',
-            icon: '',
-          }
-        ],
-        //removes all move possibilities since no piece is selected
-        moves:[],
-        //makes it the pther players turn
-        turn:!turn,
-        //updates 50 move rule since no pawn was moved and a piece couldnt have been taken
-        move50: move50+0.5,
-      })
-    } else {//for normal moves
-      this.setState({
-        //adds the previous position to the history
-        history:history.concat([squares]),
-        //determines how the 50 move rule should be updated
-        enpassent: (Math.abs(move[0].id-move[1].id)===16 && move[1].piece===1) ? move[0].id : 0,
-        //updates the board
-        squares: squares.map((squareCheck) => {
-          if (squareCheck.id === move[0].id) { //moves the piece to the new square
-            return {
-              id:squareCheck.id,
-              squareColor:squareCheck.squareColor,
-              piece: move[0].piece,
-              pieceColor: move[0].pieceColor,
-              icon: move[0].icon,
-            }
-          } else if  (squareCheck.id === move[1].id) {//resets the square the piece is moving from
-            return {
-              id:squareCheck.id,
-              squareColor:squareCheck.squareColor,
-              piece: 0,
-              pieceColor: '',
-              icon: '',
-            }
-          } else { //stays the same if the square is unaffected by the move
-            return {
-              id:squareCheck.id,
-              squareColor:squareCheck.squareColor,
-              piece: squareCheck.piece,
-              pieceColor: squareCheck.pieceColor,
-              icon: squareCheck.icon,
-            }
-          }
-        }),
-        //unselectes the piece
-        selectedPiece:[false, 
-          {
-            id:0,
-            squareColor:true,
-            piece: 0,
-            pieceColor: '',
-            icon: '',
-          }
-        ],
-        //removes all move possibilities since no piece is selected
-        moves:[],
-        //makes it the pther players turn
-        turn:!turn,
-        //updates castling as needed: if a rook or king are moved
-        castling:changeCastle(move[1], move[0], castling),
-        //updates the 50 move rule as needed
-        move50: (move[0].piece !== 0 || move[1].piece === 1) ? 0 : move50 + 0.5,
-      })
-    }
-
-    //------updates the game ending game states------
-
-    //makes a new board where the move is made and able to be used
-    var newSquares = pretendMove(move[0], move[1], squares, enpassent)
-    //determines the new 50 move rule count after the previous is made
-    var newMove50 = (move[0].piece !== 0 || move[1].piece === 1) ? 0 : move50+0.5
-    var newEnpassent = (Math.abs(move[0].id-move[1].id)===16 && move[1].piece===1) ? move[0].id : 0
-
-    //determines if the next player has any moves
-    if(isOver(newSquares, !turn, castling, newEnpassent)) {
-    
-      //determines if it is checkmate or stalemate
-      if (inCheck(newSquares, !turn, castling, newEnpassent)) {
-      //turn wins
-      this.setState({ checkmate:true })
-      } else {
-      //stalemate
-      this.setState({ stalemate:true })
-      }
-    //determines of there is a draw by repitition or 50 move rule
-    } else if(newMove50===50 || numAppearsBoard(newSquares, history) >= 2) {
-      this.setState({ draw:true })
-    }
-  }
 }
-
-// ***************** Chess Engine ******************
-
-//TODO always check if Over in engine moves and evalPos
-
-function engine(squares, castling, enpassent, history, move50, turn) {
-
-  var fullMoves = []
-  var scores=[]
-  var best
-
-  //gets all possible moves by 'turn'
-  for (const square of squares) { //loops through all squares in the position looking for pieces of 'turn'
-    if (square.pieceColor === turn) {
-      //gets all moves the piece can make in the position
-      let moves = findMoves(square, squares, castling, enpassent)
-      fullMoves = fullMoves.concat(makeFullMove(square, moves, squares))
-
-      //checks through all the moves and saves best eval in new position
-      for (const move of moves) {
-
-        //must check for different piece that pawn can promote to
-        if(isPromotion(square)) {
-
-          //Note bishop and rook will never be better than queen
-
-          //knight promote
-          let newSquares = pretendPromotion(getSquare(move, squares), square, squares, enpassent, 3)
-          let knightScore = engine_moves(newSquares, castling, 0, !turn, history.concat([squares]), 0, 0.5, false)
-
-          //queen promote
-          newSquares = pretendPromotion(getSquare(move, squares), square, squares, enpassent, 5)
-          let queenScore = engine_moves(newSquares, castling, 0, !turn, history.concat([squares]), 0, 0.5, false)
-
-          scores.push(knightScore)
-          scores.push(queenScore)
-
-        } else {
-
-          //stores updated game state: squares, castling, enpassent
-          let gameState=[[], [], 0]
-          gameState=updateGameState(getSquare(move, squares), square, squares, castling, enpassent)
-          let newMove50=(getSquare(move, squares).piece !== 0 || square.piece === 1) ? 0 : move50 + 0.5
-
-          //saves the best evaluation if that move is made
-          scores.push(engine_moves(gameState[0], gameState[1], gameState[2], !turn, history.concat([squares]), newMove50, 0.5, false))
-
-        }
-      }
-    }
-  }
-
-  //determines which eval is best
-  best=Math.max(...scores)
-
-  //finds the move that leads to the best
-  let index
-  for(const i in scores){
-    if(scores[i]===best){
-      index=i
-    }
-  }
-
-  return fullMoves[index]
-}
-
-function engine_moves(squares, castling, enpassent, turn, history, move50, inFuture, isAly) {
-  const depth = 1
-
-  //base case
-  //when depth is integer, positive numbers are good for aly
-  if(inFuture>=depth) {
-    return -1 * (evaluatePos(squares, castling, enpassent, turn, history, move50))
-  }
-
-  var scores=[]
-  var best
-
-  //determines if the 'turn' has any moves
-  if(isOver(squares, turn, castling, enpassent)) {
-      
-    //determines if it is checkmate or stalemate
-    if (inCheck(squares, turn, castling, enpassent)) { //checkmate
-      if(isAly){//aly got mated
-        return -Infinity
-      }else{//opp got mated
-        return Infinity
-      }
-    } else { //stalemate
-      return 0
-    }
-  //determines of there is a draw by repitition or 50 move rule
-  } else if(move50===50 || numAppearsBoard(squares, history) >= 2) { //if drawn by other means
-    return 0
-  } else { //if the game is not over
-    //gets all possible moves by 'turn'
-    for (const square of squares) { //loops through all squares in the position looking for pieces of 'turn'
-      if (square.pieceColor === turn) {
-        //gets all moves the piece can make in the position
-        let moves = findMoves(square, squares, castling, enpassent)
-
-        //checks through all the moves and saves best eval in new position
-        for (const move of moves) {
-
-          //must check for different piece that pawn can promote to
-          if(isPromotion(square)) {
-
-            //Note bishop and rook will never be better than queen
-
-            //knight promote
-            let newSquares = pretendPromotion(getSquare(move, squares), square, squares, enpassent, 3)
-            let knightScore = engine_moves(newSquares, castling, 0, !turn, history.concat([squares]), 0, inFuture+0.5, !isAly)
-
-            //queen promote
-            newSquares = pretendPromotion(getSquare(move, squares), square, squares, enpassent, 5)
-            let queenScore = engine_moves(newSquares, castling, 0, !turn, history.concat([squares]), 0, inFuture+0.5, !isAly)
-
-            if(isAly) { //best eval for if aly is making next move
-              scores.push(Math.max( knightScore, queenScore ))
-            } else { //best eval for if opp is making next move
-              scores.push(Math.min( knightScore, queenScore ))
-            }
-
-          } else {
-
-            //stores updated game state: squares, castling, enpassent
-            let gameState=[[], [], 0]
-            gameState=updateGameState(getSquare(move, squares), square, squares, castling, enpassent)
-            let newMove50=(getSquare(move, squares).piece !== 0 || square.piece === 1) ? 0 : move50 + 0.5
-
-            //saves the best evaluation if that move is made
-            scores.push(engine_moves(gameState[0], gameState[1], gameState[2], !turn, history.concat([squares]), newMove50, inFuture+0.5, !isAly))
-
-          }
-        }
-      }
-    }
-
-    //opp will always be trying to make the eval as low as possible and aly will be trying to maximise it
-    //determines which eval is best for 'aly'
-    if(isAly) { //best eval for if aly is making next move
-      best=Math.max(...scores)
-    } else { //best eval for if opp is making next move
-      best=Math.min(...scores)
-    }
-  }
-
-  return best
-}
-
-//updates sqaures, castling and enpassent for a move that was made
-function updateGameState(newSquare, oldSquare, squares, castling, enpassent) {
-
-  var newSquares = pretendMove(newSquare, oldSquare, squares, enpassent)
-  var newEnpassent = (Math.abs(newSquare.id-oldSquare.id)===16 && oldSquare.piece===1) ? newSquare.id : 0
-  var newCastling = changeCastle(oldSquare, newSquare, castling)
-
-  return [newSquares, newCastling, newEnpassent]
-}
-
-function makeFullMove(oldSquare, moves, squares) {
-  var fullMoves = []
-
-  for (const move of moves) {
-
-    let newSquare
-    let newSquare2 //for when promotion, there will be two possiblities
-    if(isPromotion(oldSquare)) { //when pormotion
-      newSquare= {
-        id:move,
-        squareColor:true,
-        piece: 3,
-        pieceColor: oldSquare.pieceColor,
-        icon: oldSquare.pieceColor ? <img src={wknight} className="piece-img" alt="wknight"/> : <img src={bknight} className="piece-img" alt="bknight"/>,
-      }
-      newSquare2= {
-        id:move,
-        squareColor:true,
-        piece: 5,
-        pieceColor: oldSquare.pieceColor,
-        icon: oldSquare.pieceColor ? <img src={wqueen} className="piece-img" alt="wqueen"/> : <img src={bqueen} className="piece-img" alt="bqueen"/>,
-      }
-
-      fullMoves.push([newSquare, oldSquare])
-      fullMoves.push([newSquare2, oldSquare])
-    } else { //when not pormotion
-      newSquare={
-        id:move,
-        squareColor:true,
-        piece: oldSquare.piece,
-        pieceColor: oldSquare.pieceColor,
-        icon: oldSquare.icon
-      }
-
-      fullMoves.push([newSquare, oldSquare])
-    }
-  }
-
-  return fullMoves
-}
-
-
-
-
-//evaluates a position, positive is for who plays next move
-function evaluatePos(squares, castling, enpassent, turn, history, move50) {
-  const initiativeVal = 0
-
-  //determines if the 'turn' has any moves
-  if(isOver(squares, turn, castling, enpassent)) {
-      
-    //determines if it is checkmate or stalemate
-    if (inCheck(squares, turn, castling, enpassent)) { //checkmate
-      return -Infinity
-    } else { //stalemate
-      return 0
-    }
-  //determines of there is a draw by repitition or 50 move rule
-  } else if(move50===50 || numAppearsBoard(squares, history) >= 2) { //if drawn by other means
-    return 0
-  }
-
-  //advantage of playing the next move
-  var evaluation = initiativeVal
-
-  evaluation+=evalMat(squares)
-
-  evaluation+=evalControl(squares, castling, enpassent, turn)
-  evaluation-=evalControl(squares, castling, enpassent, !turn)
-
-  return evaluation
-}
-
-//evaluate king safety and control of squares
-function evalControl(squares, castling, enpassent, turn) {
-
-  // console.log(squares)
-
-  const levelVal = 25
-  const sameSideVal = 10
-  const oppSideVal = 15
-
-  var evaluation = 0
-
-  //finds which moves '!turn' can make
-  var oppmoves = []
-  for (const square of squares) {
-    if (square.pieceColor === !turn) {
-      oppmoves = oppmoves.concat(findControl(square, squares, castling, enpassent))
-    }
-  }
-
-  //finds which squares 'turn' can make
-  var alymoves = []
-  for (const square of squares) {
-    if (square.pieceColor === turn) {
-      alymoves = alymoves.concat(findControl(square, squares, castling, enpassent))
-    }
-  }
-
-  //finds where the king is
-  var kpos
-  for (const square of squares) {
-    if (square.piece === 6 && square.pieceColor === turn) {
-      kpos=square.id
-    }
-  }
-  //finds squares near king
-  var kmoves = kingControl(getSquare(kpos, squares), squares, castling, enpassent)
-  
-
-  //find king safety
-  for (const move of kmoves) {
-    //level measures how weak the king is
-    //starts with 1 to counter act king protection of itself
-    let level=1
-    level-=numAppears(move, alymoves)
-    level+=numAppears(move, oppmoves)
-
-    evaluation-=Math.abs(level*levelVal)
-  }
-
-  //determines control of squares
-  alymoves=dedupe(alymoves)
-  if(turn) { //white
-    for (const move of alymoves){
-      if (move <= 32) {
-        evaluation+=oppSideVal
-      } else {
-        evaluation+=sameSideVal
-      }
-    }
-  } else { //black
-    for (const move of alymoves){
-      if (move > 32) {
-        evaluation+=oppSideVal
-      } else {
-        evaluation+=sameSideVal
-      }
-    }
-  }
-
-  return evaluation
-}
-
-//evaluates material in a position
-function evalMat (squares) {
-  const pawnVal = 100
-  const bishopVal = 400
-  const knightVal = 300
-  const rookVal = 500
-  const queenVal = 900
-
-  var evaluation = 0
-  for (const square of squares) {
-    if (square.pieceColor) { //for white
-      switch(square.piece) {
-        case 1: //pawn
-          evaluation+=pawnVal
-          break;
-        case 2: //bishop
-          evaluation+=bishopVal
-          break;
-        case 3: //knight
-          evaluation+=knightVal
-          break;
-        case 4: //rook
-          evaluation+=rookVal
-          break;
-        case 5: //queen
-          evaluation+=queenVal
-          break;
-        case 6: //king
-          break;
-      }
-    } else { //for black
-      switch(square.piece) {
-        case 1: //pawn
-          evaluation-=pawnVal
-          break;
-        case 2: //bishop
-          evaluation-=bishopVal
-          break;
-        case 3: //knight
-          evaluation-=knightVal
-          break;
-        case 4: //rook
-          evaluation-=rookVal
-          break;
-        case 5: //queen
-          evaluation-=queenVal
-          break;
-        case 6: //king
-          break;
-      }
-    }
-  }
-
-  return evaluation
-}
-
-function dedupe(array){
-  var unique = []
-  
-  for (const elem of array) {
-    if (!unique.includes(elem)) {
-      unique.push(elem)
-    }
-  }
-
-  return unique
-}
-
-//returns the number of times key appears in array
-function numAppears(key, array) {
-  var count=0
-  for (const elem in array) {
-    if (elem === key) {
-      count++
-    }
-  }
-  return count
-}
-
-//finds the sqaures a piece controls
-function findControl(square, squares, castling, enpassent) {
-  var moves=[]
-
-  // console.log(square)
-
-  switch(square.piece) {
-    case 1: //pawn
-      moves=pawnControl(square, squares, castling, enpassent)
-      break;
-    case 2: //bishop
-      moves=bishopControl(square, squares, castling, enpassent)
-      break;
-    case 3: //knight
-      moves=knightControl(square, squares, castling, enpassent)
-      break;
-    case 4: //rook
-      moves=rookControl(square, squares, castling, enpassent)
-      break;
-    case 5: //queen
-      let movesD=bishopControl(square, squares, castling, enpassent)
-      let movesS=rookControl(square, squares, castling, enpassent)
-      moves=movesD.concat(movesS)
-      break;
-    case 6: //king
-      moves=kingControl(square, squares, castling, enpassent)
-      break;
-  }
-
-  return moves
-}
-
-//returns an array of ids a pawn can attack
-function pawnControl(square, squares, castling, enpassent) {
-  var moves = []
-  var num=square.id
-
-  if (square.pieceColor) { //white pawn
-    //checks if the pawn can take a piece diagonally left of it
-    moves.push(infinityLeft(num-9))
-    //checks if the pawn can take a piece diagonally right of it
-    moves.push(infinityRight(num-7))
-  
-  } else { //black pawn
-    //checks if the pawn can take a piece diagonally right of it
-    moves.push(infinityRight(num+9))
-    //checks if the pawn can take a piece diagonally left of it
-    moves.push(infinityLeft(num+7))
-  }
-
-  //removes all moves where you end up in check
-  moves = moves.filter(move => testMove(getSquare(move, squares), square, squares, castling, enpassent, square.pieceColor))
-  return moves
-}
-
-//returns an array of ids a bishop can attack
-function bishopControl(square, squares, castling, enpassent) {
-  var moves = []
-  var num=square.id
-
-  //loops through all squares protruding out from 'sqaure' in the 4 diagonal diractions until it reaches a piece, or reaches the edge of the board
-  var newNum = infinityRight(num+9)
-  //checks the the new square is in the right range (1,64), that the new square is not on the same team and that the square last checked wasnt a square where the rook takes
-  while (newNum >= 1 && newNum <= 64 && (getSquare(infinityLeft(newNum-9), squares).pieceColor !== square.pieceColor || getSquare(infinityLeft(newNum-9), squares).piece===5 || getSquare(infinityLeft(newNum-9), squares).piece===2) && getSquare(infinityLeft(newNum-9), squares).pieceColor !== !square.pieceColor) {
-    moves.push(newNum)
-    newNum=infinityRight(newNum+9)
-  }
-  if(getSquare(infinityLeft(newNum-9), squares).piece===1 && !square.pieceColor) {
-    moves.push(newNum)
-  }
-  //resets the square being checked
-  newNum=infinityLeft(num-9)
-  while (newNum >= 1 && newNum <= 64 && (getSquare(infinityRight(newNum+9), squares).pieceColor !== square.pieceColor || getSquare(infinityRight(newNum+9), squares).piece===5 || getSquare(infinityRight(newNum+9), squares).piece===2) && getSquare(infinityRight(newNum+9), squares).pieceColor !== !square.pieceColor) {
-    moves.push(newNum)
-    newNum=infinityLeft(newNum-9)
-  }
-  if(getSquare(infinityRight(newNum+9), squares).piece===1 && square.pieceColor) {
-    moves.push(newNum)
-  }
-  //resets the square being checked
-  newNum=infinityLeft(num+7)
-  while (newNum >= 1 && newNum <= 64 && (getSquare(infinityRight(newNum-7), squares).pieceColor !== square.pieceColor || getSquare(infinityRight(newNum-7), squares).piece===5 || getSquare(infinityRight(newNum-7), squares).piece===2) && getSquare(infinityRight(newNum-7), squares).pieceColor !== !square.pieceColor) {
-    moves.push(newNum)
-    newNum=infinityLeft(newNum+7)
-  }
-  if(getSquare(infinityRight(newNum-7), squares).piece===1 && !square.pieceColor) {
-    moves.push(newNum)
-  }
-  //resets the square being checked
-  newNum=infinityRight(num-7)
-  while (newNum >= 1 && newNum <= 64 && (getSquare(infinityLeft(newNum+7), squares).pieceColor !== square.pieceColor || getSquare(infinityLeft(newNum+7), squares).piece===5 || getSquare(infinityLeft(newNum+7), squares).piece===2) && getSquare(infinityLeft(newNum+7), squares).pieceColor !== !square.pieceColor) {
-    moves.push(newNum)
-    newNum=infinityRight(newNum-7)
-  }
-  if(getSquare(infinityLeft(newNum+7), squares).piece===1 && square.pieceColor) {
-    moves.push(newNum)
-  }
-
-  //removes all moves where you end up in check
-  moves = moves.filter(move => testMove(getSquare(move, squares), square, squares, castling, enpassent, square.pieceColor))
-  return moves
-}
-
-//returns an array of ids a knight can attack
-function knightControl(square,squares, castling, enpassent) {
-  var moves = []
-  var num=square.id
-
-  //checks all 8 squares a knight could move to end checks the the square is on the board
-  if ((num-1) %8 === 0) { //for when it will wrap across the left side 4 times
-    let newNum=num+14
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+10
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+23
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+17
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-6
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-2
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-15
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-9
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-  } else if ((num-1) %8 === 1) { //for when it will wrap across the left side 2 times
-    let newNum=num+14
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+10
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+15
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+17
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-6
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-2
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-15
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-17
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-  } else if ((num-1) %8 === 7) { //for when it will wrap across the right side 4 times
-    let newNum=num+6
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+2
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+15
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+9
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-14
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-10
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-23
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-17
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-  } else if ((num-1) %8 === 6) { //for when it will wrap across the right side 2 times
-    let newNum=num+6
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+2
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+15
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+17
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-14
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-10
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-15
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-17
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-  } else { //for when it will not wrap
-    let newNum=num+6
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+10
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+15
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+17
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-6
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-10
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-15
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-17
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-  }
-
-  //removes all moves where you end up in check
-  moves = moves.filter(move => testMove(getSquare(move, squares), square, squares, castling, enpassent, square.pieceColor))
-  return moves
-}
-
-//returns an array of ids a rook can attack
-function rookControl(square, squares, castling, enpassent) {
-  var moves = []
-  var num=square.id
-
-  //loops through all squares protruding out from 'sqaure' in the 4 cardinal diractions until it reaches it's self again, reaches a piece, or reaches the edge of the board
-  var newNum = num+8
-  //checks the the new square is in the right range (1,64), that the last square checked wasnt its own piece or if it is that it is a queen or rook, that the square last checked wasnt a square where the rook takes, that the horizontal moves dont loop
-  while (newNum >= 1 && newNum <= 64 && (getSquare((newNum-8), squares).pieceColor !== square.pieceColor || getSquare((newNum-8), squares).piece === 5 || getSquare((newNum-8), squares).piece === 4) && getSquare(newNum-8, squares).pieceColor !== !square.pieceColor) {
-    moves.push(newNum)
-    newNum+=8
-  }
-  //resets the square being checked
-  newNum=num-8
-  while (newNum >= 1 && newNum <= 64 && (getSquare((newNum+8), squares).pieceColor !== square.pieceColor || getSquare((newNum+8), squares).piece === 5 || getSquare((newNum+8), squares).piece === 4) && getSquare(newNum+8, squares).pieceColor !== !square.pieceColor) {
-    moves.push(newNum)
-    newNum-=8
-  }
-  //resets the square being checked
-  newNum=infinityRight(num+1)
-  while (newNum >= 1 && newNum <= 64 && (getSquare(infinityLeft(newNum-1), squares).pieceColor !== square.pieceColor || getSquare(infinityLeft(newNum-1), squares).piece === 5 || getSquare(infinityLeft(newNum-1), squares).piece === 4) && getSquare(infinityLeft(newNum-1), squares).pieceColor !== !square.pieceColor && square.id !== newNum) {
-    moves.push(newNum)
-    newNum=infinityRight(newNum+1)
-  }
-  //resets the square being checked
-  newNum=infinityLeft(num-1)
-  while (newNum >= 1 && newNum <= 64 && (getSquare(infinityRight(newNum+1), squares).pieceColor !== square.pieceColor || getSquare(infinityRight(newNum+1), squares).piece === 5 || getSquare(infinityRight(newNum+1), squares).piece === 4) && getSquare(infinityRight(newNum+1), squares).pieceColor !== !square.pieceColor && square.id !== newNum) {
-    moves.push(newNum)
-    newNum=infinityLeft(newNum-1)
-  }
-
-  //removes all moves where you end up in check
-  moves = moves.filter(move => testMove(getSquare(move, squares), square, squares, castling, enpassent, square.pieceColor))
-  return moves
-}
-
-//returns an array of ids a king can attack
-function kingControl(square, squares, castling, enpassent) {
-  var moves=[]
-  var num=square.id
-
-  //adds all standard moves to the list
-  if((num-1) %8 === 0) {//when infinity wraps on the left side
-    var newNum=num+1
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+7
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+8
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-8
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+15
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-7
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+9
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-1
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-  } else if ((num-1) %8 === 7) {//when infinity wraps on the right side
-    var newNum=num-7
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-1
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+8
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-8
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+7
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-15
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+1
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-9
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-  } else {//when no wrapping is occuring
-    var newNum=num+1
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-1
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+8
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-8
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+7
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-7
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num+9
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-    newNum=num-9
-    if(newNum>=1 && newNum<=64){
-      moves.push(newNum)
-    }
-  }
-
-  //removes all moves where you end up in check
-  moves = moves.filter(move => testMove(getSquare(move, squares), square, squares, castling, enpassent, square.pieceColor))
-
-  return moves
-}
-
-// *************************************************
 
 //returns the number of times a position has already been reached
-function numAppearsBoard(squares, history) {
+function numAppears(squares, history) {
   var count = 0
   //loops through each board in history and determines if the two boards are the same
   for (const squaresCheck of history) {
@@ -2797,7 +1711,7 @@ function testMove(newSquare, oldSquare, squares, castling, enpassent, turn) {
   return !inCheckSafe(newSquares, turn, newCastling, newEnpassent)
 }
 
-//returns a board with a move actually made, no promotion though
+//returns a board with a move actually made
 function pretendMove(newSquare, oldSquare, squares, enpassent) {
   var newSquares
 

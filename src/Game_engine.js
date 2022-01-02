@@ -1402,7 +1402,7 @@ class Game_engine extends React.Component {
     return (
       <div className='App'>
         {/*determines what to display above the board: will say whos turn or the result of the game */}
-        <h1 className='header'>{this.state.draw ? 'Draw' : (this.state.checkmate ? 'Checkmate!' : (this.state.stalemate ? 'Stalemate' : (this.state.turn ? 'White\'s Turn' : 'Black\'s Turn')))}</h1>
+        <h1 className='game-info'>{this.state.draw ? 'Draw' : (this.state.checkmate ? 'Checkmate!' : (this.state.stalemate ? 'Stalemate' : (this.state.turn ? 'White\'s Turn' : 'Black\'s Turn')))}</h1>
         
         {/* Promotion buttons which appear only when promoting */}
         {this.state.promoting ? 
@@ -1445,6 +1445,9 @@ class Game_engine extends React.Component {
             selectedNum={this.state.selectedPiece[1].id}
           />
         </div>
+        <p className='description'>
+          Note: Abbott runs after you play a move and your move will not appear until Abbott comes up with a move. Please wait for him to play (about 1-2 seconds).
+        </p>
       </div>
     );
   }
