@@ -2013,10 +2013,10 @@ function evalControl(squares, castling, enpassent, turn) {
 //evaluates material in a position
 function evalMat (squares) {
   const pawnVal = 100
-  const bishopVal = 330
+  const bishopVal = 400
   const knightVal = 300
   const rookVal = 500
-  const queenVal = 200000
+  const queenVal = 900
 
   var evaluation = 0
   for (const square of squares) {
