@@ -521,18 +521,20 @@ class Game extends React.Component {
   //called when a square has been clicked on
   //determines if the game is still being played and if the user is trying to make a move or select a piece
   selecting(square) {
-    (this.state.promoting ?
-      (this.nothing()) : //random function that does actually nothin
-      ((this.state.checkmate || this.state.stalemate || this.state.draw) ? 
-        this.unselect() :
-        (this.state.selectedPiece[0] ? this.checkMove(square) : this.pickPiece(square))))
+    if(this.state.turn) {
+      (this.state.promoting ?
+        (this.nothing()) : //random function that does actually nothin
+        ((this.state.checkmate || this.state.stalemate || this.state.draw) ? 
+          this.unselect() :
+          (this.state.selectedPiece[0] ? this.checkMove(square) : this.pickPiece(square))))
+    }
   }
 
   //called when a piece is being moved to a legal square
   //updates the board and game state variables
   makeMove(square) {
     // console.log(evaluatePos(this.state.squares, this.state.castling, this.state.enpassent, this.state.turn))
-    console.log(engine(this.state.squares, this.state.castling, this.state.enpassent, this.state.history, this.state.move50, this.state.turn))
+    // console.log(engine_moves(this.state.squares, this.state.castling, this.state.enpassent, this.state.turn, this.state.history, this.state.move50, 0, true))
 
     //------updating board, and game states other than those which singify the end of the game------
     if (isEnpassent(square, this.state.selectedPiece[1])) {//for enpassent moves
@@ -787,6 +789,11 @@ class Game extends React.Component {
       } else if(newMove50===50 || numAppearsBoard(newSquares, this.state.history) >= 2) {
         this.setState({ draw:true })
       }
+
+      var newCastling = changeCastle(this.state.selectedPiece[1], square, this.state.castling)
+      var newHistory = this.state.history.concat([this.state.squares])
+      //bot makes move
+      this.botMove(newSquares, newCastling, newEnpassent, newHistory, newMove50, !this.state.turn)
     }
   }
 
@@ -1383,6 +1390,12 @@ class Game extends React.Component {
 
       //Note: you cant reach a draw after promoting because you mved a pawn and you couldnt have reached an old position
     }
+
+    var newMove50 = 0
+    var newEnpassent = 0
+    var newCastling = this.state.castling
+    var newHistory = this.state.history.concat([this.state.squares])
+    this.botMove(newSquares, newCastling, newEnpassent, newHistory, newMove50, !this.state.turn)
   }
 
   render() {
@@ -1435,6 +1448,262 @@ class Game extends React.Component {
       </div>
     );
   }
+
+  componentDidUpdate(prevProps, prevState) {
+    //blacks turn an the game isnt over
+    if(!this.state.turn && !this.state.checkmate && !this.state.stalemate && !this.state.draw && false) {
+      this.botMove(this.state.squares, this.state.castling, this.state.enpassent, this.state.history, this.state.move50, this.state.turn)
+    }
+  }
+
+  botMove(squares, castling, enpassent, history, move50, turn){
+    //blacks turn an the game isnt over
+    var move = engine(squares, castling, enpassent, history, move50, turn)
+
+
+    //------updating board, and game states other than those which singify the end of the game------
+    if (isEnpassent(move[0], move[1])) {//for enpassent moves
+      this.setState({
+        //adds the previous position to the history
+        history:history.concat([squares]),
+        //updates the board
+        squares: squares.map((squareCheck) => {
+          if (squareCheck.id === move[0].id) { //moves the piece to the new square
+            return {
+              id:move[0].id,
+              squareColor:move[0].squareColor,
+              piece: move[0].piece,
+              pieceColor: move[0].pieceColor,
+              icon: move[0].icon,
+            }
+          } else if  (squareCheck.id === move[1].id) { //resets the square the piece is moving from
+            return {
+              id:squareCheck.id,
+              squareColor:squareCheck.squareColor,
+              piece: 0,
+              pieceColor: '',
+              icon: '',
+            }
+          } else if (squareCheck.id === enpassent) { //deletes the pawn on enpassent square
+            return {
+              id:squareCheck.id,
+              squareColor:squareCheck.squareColor,
+              piece: 0,
+              pieceColor: '',
+              icon: '',
+            }
+          } else { //stays the same if the square is unaffected by the move
+            return {
+              id:squareCheck.id,
+              squareColor:squareCheck.squareColor,
+              piece: squareCheck.piece,
+              pieceColor: squareCheck.pieceColor,
+              icon: squareCheck.icon,
+            }
+          }
+        }),
+        //unselectes the piece
+        selectedPiece:[false, 
+          {
+            id:0,
+            squareColor:true,
+            piece: 0,
+            pieceColor: '',
+            icon: '',
+          }
+        ],
+        //removes all move possibilities since no piece is selected
+        moves:[],
+        //makes it the pther players turn
+        turn:!turn,
+        //resets enpassent since a pawn couldnt have moved up 2 squares
+        enpassent: 0,
+        //resets 50 move rule since a pawn was moved and piece was taken
+        move50: 0,
+      })
+    } else if(isCastle(move[0], move[1])) { //for castling
+
+      //variable to store the id of the square the piece is currently on
+      var num=move[1].id
+
+      //initilaizes ids for where the rook is moving
+      var oldId
+      var newId
+      //determiens the ids of the rook movements 
+      if(move[1].pieceColor && num+2 === move[0].id) { //white castle short
+        newId=62
+        oldId=64
+      } else if(move[1].pieceColor && num-2 === move[0].id) {  //white castle long
+        newId=60
+        oldId=57
+      } else if(!move[1].pieceColor && num+2 === move[0].id) { //black castle short
+        newId=6
+        oldId=8
+      } else { //black castle long
+        newId=4
+        oldId=1
+      }
+
+      //creates sqaure to identity which square on the board matchs it when moving the pieces
+      //only the id is needed for the one
+      var newRook = {
+        id:newId
+      }
+      //creates sqaure to identity which square on the board matchs it when moving the pieces
+      var oldRook = {
+        id:oldId,
+        squareColor:getSquare(oldId, squares).squareColor,
+        piece: getSquare(oldId, squares).piece,
+        pieceColor: getSquare(oldId, squares).pieceColor,
+        icon: getSquare(oldId, squares).icon,
+      }
+
+      this.setState({
+        //adds the previous position to the history
+        history:history.concat([squares]),
+        //makes the appropriate teams castling rights false
+        castling: move[1].pieceColor ? [false, false, castling[2], castling[3]] : [castling[0], castling[1], false, false],
+        enpassent: 0,
+        //updates the board
+        squares: squares.map((squareCheck) => {
+          if (squareCheck.id === move[0].id) { //moves the king to the new square
+            return {
+              id:squareCheck.id,
+              squareColor:squareCheck.squareColor,
+              piece: move[1].piece,
+              pieceColor: move[1].pieceColor,
+              icon: move[1].icon,
+            }
+          } else if  (squareCheck.id === move[1].id) {//resets the square the king is moving from
+            return {
+              id:squareCheck.id,
+              squareColor:squareCheck.squareColor,
+              piece: 0,
+              pieceColor: '',
+              icon: '',
+            }
+          } else if(squareCheck.id === oldRook.id) { //resets the square the rook is moving from
+            return {
+              id:squareCheck.id,
+              squareColor:squareCheck.squareColor,
+              piece: 0,
+              pieceColor: '',
+              icon: '',
+            }
+          } else if(squareCheck.id === newRook.id) { //moves the rook to the new square
+            return {
+              id:squareCheck.id,
+              squareColor:squareCheck.squareColor,
+              piece: oldRook.piece,
+              pieceColor: oldRook.pieceColor,
+              icon: oldRook.icon,
+            }
+          } else {//stays the same if the square is unaffected by the move
+            return {
+              id:squareCheck.id,
+              squareColor:squareCheck.squareColor,
+              piece: squareCheck.piece,
+              pieceColor: squareCheck.pieceColor,
+              icon: squareCheck.icon,
+            }
+          }
+        }),
+        //unselectes the king
+        selectedPiece:[false, 
+          {
+            id:0,
+            squareColor:true,
+            piece: 0,
+            pieceColor: '',
+            icon: '',
+          }
+        ],
+        //removes all move possibilities since no piece is selected
+        moves:[],
+        //makes it the pther players turn
+        turn:!turn,
+        //updates 50 move rule since no pawn was moved and a piece couldnt have been taken
+        move50: move50+0.5,
+      })
+    } else {//for normal moves
+      this.setState({
+        //adds the previous position to the history
+        history:history.concat([squares]),
+        //determines how the 50 move rule should be updated
+        enpassent: (Math.abs(move[0].id-move[1].id)===16 && move[1].piece===1) ? move[0].id : 0,
+        //updates the board
+        squares: squares.map((squareCheck) => {
+          if (squareCheck.id === move[0].id) { //moves the piece to the new square
+            return {
+              id:squareCheck.id,
+              squareColor:squareCheck.squareColor,
+              piece: move[0].piece,
+              pieceColor: move[0].pieceColor,
+              icon: move[0].icon,
+            }
+          } else if  (squareCheck.id === move[1].id) {//resets the square the piece is moving from
+            return {
+              id:squareCheck.id,
+              squareColor:squareCheck.squareColor,
+              piece: 0,
+              pieceColor: '',
+              icon: '',
+            }
+          } else { //stays the same if the square is unaffected by the move
+            return {
+              id:squareCheck.id,
+              squareColor:squareCheck.squareColor,
+              piece: squareCheck.piece,
+              pieceColor: squareCheck.pieceColor,
+              icon: squareCheck.icon,
+            }
+          }
+        }),
+        //unselectes the piece
+        selectedPiece:[false, 
+          {
+            id:0,
+            squareColor:true,
+            piece: 0,
+            pieceColor: '',
+            icon: '',
+          }
+        ],
+        //removes all move possibilities since no piece is selected
+        moves:[],
+        //makes it the pther players turn
+        turn:!turn,
+        //updates castling as needed: if a rook or king are moved
+        castling:changeCastle(move[1], move[0], castling),
+        //updates the 50 move rule as needed
+        move50: (move[0].piece !== 0 || move[1].piece === 1) ? 0 : move50 + 0.5,
+      })
+    }
+
+    //------updates the game ending game states------
+
+    //makes a new board where the move is made and able to be used
+    var newSquares = pretendMove(move[0], move[1], squares, enpassent)
+    //determines the new 50 move rule count after the previous is made
+    var newMove50 = (move[0].piece !== 0 || move[1].piece === 1) ? 0 : move50+0.5
+    var newEnpassent = (Math.abs(move[0].id-move[1].id)===16 && move[1].piece===1) ? move[0].id : 0
+
+    //determines if the next player has any moves
+    if(isOver(newSquares, !turn, castling, newEnpassent)) {
+    
+      //determines if it is checkmate or stalemate
+      if (inCheck(newSquares, !turn, castling, newEnpassent)) {
+      //turn wins
+      this.setState({ checkmate:true })
+      } else {
+      //stalemate
+      this.setState({ stalemate:true })
+      }
+    //determines of there is a draw by repitition or 50 move rule
+    } else if(newMove50===50 || numAppearsBoard(newSquares, history) >= 2) {
+      this.setState({ draw:true })
+    }
+  }
 }
 
 // ***************** Chess Engine ******************
@@ -1442,9 +1711,64 @@ class Game extends React.Component {
 //TODO always check if Over in engine moves and evalPos
 
 function engine(squares, castling, enpassent, history, move50, turn) {
-  let evaluation= engine_moves(squares, castling, enpassent, turn, history, move50, 0, true)
-  console.log('here')
-  return evaluation
+
+  var fullMoves = []
+  var scores=[]
+  var best
+
+  //gets all possible moves by 'turn'
+  for (const square of squares) { //loops through all squares in the position looking for pieces of 'turn'
+    if (square.pieceColor === turn) {
+      //gets all moves the piece can make in the position
+      let moves = findMoves(square, squares, castling, enpassent)
+      fullMoves = fullMoves.concat(makeFullMove(square, moves, squares))
+
+      //checks through all the moves and saves best eval in new position
+      for (const move of moves) {
+
+        //must check for different piece that pawn can promote to
+        if(isPromotion(square)) {
+
+          //Note bishop and rook will never be better than queen
+
+          //knight promote
+          let newSquares = pretendPromotion(getSquare(move, squares), square, squares, enpassent, 3)
+          let knightScore = engine_moves(newSquares, castling, 0, !turn, history.concat([squares]), 0, 0.5, false)
+
+          //queen promote
+          newSquares = pretendPromotion(getSquare(move, squares), square, squares, enpassent, 5)
+          let queenScore = engine_moves(newSquares, castling, 0, !turn, history.concat([squares]), 0, 0.5, false)
+
+          scores.push(knightScore)
+          scores.push(queenScore)
+
+        } else {
+
+          //stores updated game state: squares, castling, enpassent
+          let gameState=[[], [], 0]
+          gameState=updateGameState(getSquare(move, squares), square, squares, castling, enpassent)
+          let newMove50=(getSquare(move, squares).piece !== 0 || square.piece === 1) ? 0 : move50 + 0.5
+
+          //saves the best evaluation if that move is made
+          scores.push(engine_moves(gameState[0], gameState[1], gameState[2], !turn, history.concat([squares]), newMove50, 0.5, false))
+
+        }
+      }
+    }
+  }
+
+  //determines which eval is best
+  best=Math.max(...scores)
+
+  //finds the move that leads to the best
+  let index
+  for(const i in scores){
+    if(scores[i]===best){
+      index=i
+    }
+  }
+
+  return fullMoves[index]
 }
 
 function engine_moves(squares, castling, enpassent, turn, history, move50, inFuture, isAly) {
@@ -1453,7 +1777,7 @@ function engine_moves(squares, castling, enpassent, turn, history, move50, inFut
   //base case
   //when depth is integer, positive numbers are good for aly
   if(inFuture>=depth) {
-    return evaluatePos(squares, castling, enpassent, turn, history, move50)
+    return -1 * (evaluatePos(squares, castling, enpassent, turn, history, move50))
   }
 
   var scores=[]
@@ -1541,11 +1865,53 @@ function updateGameState(newSquare, oldSquare, squares, castling, enpassent) {
   return [newSquares, newCastling, newEnpassent]
 }
 
+function makeFullMove(oldSquare, moves, squares) {
+  var fullMoves = []
+
+  for (const move of moves) {
+
+    let newSquare
+    let newSquare2 //for when promotion, there will be two possiblities
+    if(isPromotion(oldSquare)) { //when pormotion
+      newSquare= {
+        id:move,
+        squareColor:true,
+        piece: 3,
+        pieceColor: oldSquare.pieceColor,
+        icon: oldSquare.pieceColor ? <img src={wknight} className="piece-img" alt="wknight"/> : <img src={bknight} className="piece-img" alt="bknight"/>,
+      }
+      newSquare2= {
+        id:move,
+        squareColor:true,
+        piece: 5,
+        pieceColor: oldSquare.pieceColor,
+        icon: oldSquare.pieceColor ? <img src={wqueen} className="piece-img" alt="wqueen"/> : <img src={bqueen} className="piece-img" alt="bqueen"/>,
+      }
+
+      fullMoves.push([newSquare, oldSquare])
+      fullMoves.push([newSquare2, oldSquare])
+    } else { //when not pormotion
+      newSquare={
+        id:move,
+        squareColor:true,
+        piece: oldSquare.piece,
+        pieceColor: oldSquare.pieceColor,
+        icon: oldSquare.icon
+      }
+
+      fullMoves.push([newSquare, oldSquare])
+    }
+  }
+
+  return fullMoves
+}
+
 
 
 
 //evaluates a position, positive is for who plays next move
 function evaluatePos(squares, castling, enpassent, turn, history, move50) {
+  const initiativeVal = 0
 
   //determines if the 'turn' has any moves
   if(isOver(squares, turn, castling, enpassent)) {
@@ -1562,7 +1928,7 @@ function evaluatePos(squares, castling, enpassent, turn, history, move50) {
   }
 
   //advantage of playing the next move
-  var evaluation = 40
+  var evaluation = initiativeVal
 
   evaluation+=evalMat(squares)
 
@@ -1578,8 +1944,8 @@ function evalControl(squares, castling, enpassent, turn) {
   // console.log(squares)
 
   const levelVal = 25
-  const sameSideVale = 10
-  const oppSideVal = 20
+  const sameSideVal = 10
+  const oppSideVal = 15
 
   var evaluation = 0
 
@@ -1628,7 +1994,7 @@ function evalControl(squares, castling, enpassent, turn) {
       if (move <= 32) {
         evaluation+=oppSideVal
       } else {
-        evaluation+=sameSideVale
+        evaluation+=sameSideVal
       }
     }
   } else { //black
@@ -1636,7 +2002,7 @@ function evalControl(squares, castling, enpassent, turn) {
       if (move > 32) {
         evaluation+=oppSideVal
       } else {
-        evaluation+=sameSideVale
+        evaluation+=sameSideVal
       }
     }
   }
@@ -1647,10 +2013,10 @@ function evalControl(squares, castling, enpassent, turn) {
 //evaluates material in a position
 function evalMat (squares) {
   const pawnVal = 100
-  const bishopVal = 320
+  const bishopVal = 330
   const knightVal = 300
   const rookVal = 500
-  const queenVal = 900
+  const queenVal = 200000
 
   var evaluation = 0
   for (const square of squares) {
