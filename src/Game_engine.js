@@ -512,6 +512,9 @@ class Game_engine extends React.Component {
         pieceColor: '',
         icon: '',
       },
+      wcheck:0,
+      bcheck:0,
+      lastmove:0,
     }
   }
 
@@ -774,6 +777,8 @@ class Game_engine extends React.Component {
       var newMove50 = (square.piece !== 0 || this.state.selectedPiece[1].piece === 1) ? 0 : this.state.move50+0.5
       var newEnpassent = (Math.abs(square.id-this.state.selectedPiece[1].id)===16 && this.state.selectedPiece[1].piece===1) ? square.id : 0
 
+      this.setState({ lastmove: square.id, wcheck: this.findCheck(true, newSquares), bcheck: this.findCheck(false, newSquares) })
+
       //determines if the next player has any moves
       if(isOver(newSquares, !this.state.turn, this.state.castling, newEnpassent)) {
       
@@ -793,7 +798,16 @@ class Game_engine extends React.Component {
       var newCastling = changeCastle(this.state.selectedPiece[1], square, this.state.castling)
       var newHistory = this.state.history.concat([this.state.squares])
       //bot makes move
-      this.botMove(newSquares, newCastling, newEnpassent, newHistory, newMove50, !this.state.turn)
+      // this.botMove(newSquares, newCastling, newEnpassent, newHistory, newMove50, !this.state.turn)
+    }
+  }
+
+  findCheck(turn, newSquares) {
+    for(const square of this.state.squares) {
+      if(square.piece === 6 && square.pieceColor === turn) {
+        var check=inCheck(newSquares, turn, this.state.castling, this.state.enpassent)
+        return check ? square.id : 0
+      }
     }
   }
 
@@ -1376,6 +1390,8 @@ class Game_engine extends React.Component {
     //makes a new board where the move is made and able to be used
     var newSquares = pretendPromotion(this.state.promoteSavedSquare, this.state.selectedPiece[1], this.state.squares, this.state.enpassent, piece)
 
+    this.setState({ lastmove: this.state.promoteSavedSquare.id, wcheck: this.findCheck(true, newSquares), bcheck: this.findCheck(false, newSquares) })
+
     //determines if the next player has any moves
     if(isOver(newSquares, !this.state.turn, this.state.castling, this.state.enpassent)) {
 
@@ -1391,11 +1407,11 @@ class Game_engine extends React.Component {
       //Note: you cant reach a draw after promoting because you mved a pawn and you couldnt have reached an old position
     }
 
-    var newMove50 = 0
-    var newEnpassent = 0
-    var newCastling = this.state.castling
-    var newHistory = this.state.history.concat([this.state.squares])
-    this.botMove(newSquares, newCastling, newEnpassent, newHistory, newMove50, !this.state.turn)
+    // var newMove50 = 0
+    // var newEnpassent = 0
+    // var newCastling = this.state.castling
+    // var newHistory = this.state.history.concat([this.state.squares])
+    // this.botMove(newSquares, newCastling, newEnpassent, newHistory, newMove50, !this.state.turn)
   }
 
   render() {
@@ -1443,6 +1459,9 @@ class Game_engine extends React.Component {
             moves={this.state.moves}
             //data for which square is selected
             selectedNum={this.state.selectedPiece[1].id}
+            lastMove={this.state.lastmove}
+            wcheck={this.state.wcheck}
+            bcheck={this.state.bcheck}
           />
         </div>
         <p className='description'>
@@ -1454,7 +1473,7 @@ class Game_engine extends React.Component {
 
   componentDidUpdate(prevProps, prevState) {
     //blacks turn an the game isnt over
-    if(!this.state.turn && !this.state.checkmate && !this.state.stalemate && !this.state.draw && false) {
+    if(!this.state.turn && !this.state.checkmate && !this.state.stalemate && !this.state.draw) {
       this.botMove(this.state.squares, this.state.castling, this.state.enpassent, this.state.history, this.state.move50, this.state.turn)
     }
   }
@@ -1691,6 +1710,9 @@ class Game_engine extends React.Component {
     var newMove50 = (move[0].piece !== 0 || move[1].piece === 1) ? 0 : move50+0.5
     var newEnpassent = (Math.abs(move[0].id-move[1].id)===16 && move[1].piece===1) ? move[0].id : 0
 
+    this.setState({ lastmove: move[0].id, wcheck: this.findCheck(true, newSquares), bcheck: this.findCheck(false, newSquares) })
+    console.log(move[0])
+
     //determines if the next player has any moves
     if(isOver(newSquares, !turn, castling, newEnpassent)) {
     
@@ -1780,7 +1802,7 @@ function engine_moves(squares, castling, enpassent, turn, history, move50, inFut
   //base case
   //when depth is integer, positive numbers are good for aly
   if(inFuture>=depth) {
-    return -1 * (evaluatePos(squares, castling, enpassent, turn, history, move50))
+    return 1 * (evaluatePos(squares, castling, enpassent, turn, history, move50))
   }
 
   var scores=[]
@@ -1913,8 +1935,9 @@ function makeFullMove(oldSquare, moves, squares) {
 
 
 //evaluates a position, positive is for who plays next move
+//postive is good for 'turn'
 function evaluatePos(squares, castling, enpassent, turn, history, move50) {
-  const initiativeVal = 0
+  const initiativeVal = 10
 
   //determines if the 'turn' has any moves
   if(isOver(squares, turn, castling, enpassent)) {
@@ -1933,7 +1956,7 @@ function evaluatePos(squares, castling, enpassent, turn, history, move50) {
   //advantage of playing the next move
   var evaluation = initiativeVal
 
-  evaluation+=evalMat(squares)
+  evaluation+=evalMat(squares, turn)
 
   evaluation+=evalControl(squares, castling, enpassent, turn)
   evaluation-=evalControl(squares, castling, enpassent, !turn)
@@ -1960,7 +1983,7 @@ function evalControl(squares, castling, enpassent, turn) {
     }
   }
 
-  //finds which squares 'turn' can make
+  //finds which moves 'turn' can make
   var alymoves = []
   for (const square of squares) {
     if (square.pieceColor === turn) {
@@ -1968,7 +1991,7 @@ function evalControl(squares, castling, enpassent, turn) {
     }
   }
 
-  //finds where the king is
+  //finds where the 'turn's' king is
   var kpos
   for (const square of squares) {
     if (square.piece === 6 && square.pieceColor === turn) {
@@ -1987,12 +2010,12 @@ function evalControl(squares, castling, enpassent, turn) {
     level-=numAppears(move, alymoves)
     level+=numAppears(move, oppmoves)
 
-    evaluation-=Math.abs(level*levelVal)
+    evaluation-= level>0 ? (level*levelVal) : 0
   }
 
   //determines control of squares
   alymoves=dedupe(alymoves)
-  if(turn) { //white
+  if(turn) { //'turn' is white
     for (const move of alymoves){
       if (move <= 32) {
         evaluation+=oppSideVal
@@ -2000,7 +2023,7 @@ function evalControl(squares, castling, enpassent, turn) {
         evaluation+=sameSideVal
       }
     }
-  } else { //black
+  } else { //'turn' is black
     for (const move of alymoves){
       if (move > 32) {
         evaluation+=oppSideVal
@@ -2014,16 +2037,17 @@ function evalControl(squares, castling, enpassent, turn) {
 }
 
 //evaluates material in a position
-function evalMat (squares) {
+//positive number is good for 'turn'
+function evalMat (squares, turn) {
   const pawnVal = 100
-  const bishopVal = 400
+  const bishopVal = 400 //much higher than normal because of how tricky they are
   const knightVal = 300
   const rookVal = 500
   const queenVal = 900
 
   var evaluation = 0
   for (const square of squares) {
-    if (square.pieceColor) { //for white
+    if (square.pieceColor === turn) { //for 'turn'
       switch(square.piece) {
         case 1: //pawn
           evaluation+=pawnVal
@@ -2043,7 +2067,7 @@ function evalMat (squares) {
         case 6: //king
           break;
       }
-    } else { //for black
+    } else { //for '!turn'
       switch(square.piece) {
         case 1: //pawn
           evaluation-=pawnVal
