@@ -46,11 +46,17 @@ In the static evaluation, the computer looks at three things.
  * How safe the king is. How weak are the squares surrounding the king.
 
 Chess piece are usually given this set of points.
+
 Pawn = 1
+
 Knight = 3
+
 Bishop = 3
+
 Rook = 5
+
 Queen = 9
+
 For infinity chess, I decided to give bishops 4 points because of how tricky they can be with the wrapping edge.
 
 When calculating control of squares, squares are not counted multiple times. For example if a bishop and a kight are both attacking d4, the points are only given for control of d4 once.
