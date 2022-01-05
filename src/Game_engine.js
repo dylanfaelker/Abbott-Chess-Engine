@@ -1806,7 +1806,7 @@ function engine(squares, castling, enpassent, history, move50, turn) {
 
 //alpha is worst score for white, beta is worst score for black
 function engine_moves(squares, castling, enpassent, turn, history, move50, inFuture, alpha, beta) {
-  const depth = 2
+  const depth = 1
 
   //base case
   //when depth is integer, positive numbers are good for white
@@ -3723,7 +3723,7 @@ function pawnMove(square, squares, castling, enpassent) {
      moves.push(num-8)
     }
     //checks if the pawn can be pushed forward 2 sqaures
-    if(row===7 && getSquare(num-16, squares).piece===0)  {
+    if(row===7 && getSquare(num-16, squares).piece===0 && getSquare(num-8, squares).piece===0)  {
       moves.push(num-16)
     }
     //checks if the pawn can take a piece diagonally left of it
@@ -3749,7 +3749,7 @@ function pawnMove(square, squares, castling, enpassent) {
       moves.push(num+8)
     }
     //checks if the pawn can be pushed forward 2 sqaures
-    if(row===2 && getSquare(num+16, squares).piece===0)  {
+    if(row===2 && getSquare(num+16, squares).piece===0 && getSquare(num+8, squares).piece===0)  {
        moves.push(num+16)
     }
     //checks if the pawn can take a piece diagonally right of it
@@ -4016,7 +4016,7 @@ function pawnMoveSafe(square, squares, castling, enpassent) {
     if(getSquare(num-8, squares).piece===0) {
      moves.push(num-8)
     }
-    if(row===7 && getSquare(num-16, squares).piece===0)  {
+    if(row===7 && getSquare(num-16, squares).piece===0 && getSquare(num-8, squares).piece===0)  {
       moves.push(num-16)
     }
     if(getSquare(infinityLeft(num-9), squares).pieceColor === !square.pieceColor) {
@@ -4035,7 +4035,7 @@ function pawnMoveSafe(square, squares, castling, enpassent) {
     if(getSquare(num+8, squares).piece===0) {
       moves.push(num+8)
      }
-     if(row===2 && getSquare(num+16, squares).piece===0)  {
+     if(row===2 && getSquare(num+16, squares).piece===0 && getSquare(num+8, squares).piece===0)  {
        moves.push(num+16)
      }
     if(getSquare(infinityRight(num+9), squares).pieceColor === !square.pieceColor) {
