@@ -1485,6 +1485,7 @@ class Game_engine extends React.Component {
     //blacks turn an the game isnt over
     var move = engine(squares, castling, enpassent, history, move50, turn)
 
+    console.log(move)
 
     //------updating board, and game states other than those which singify the end of the game------
     if (isEnpassent(move[0], move[1])) {//for enpassent moves
@@ -1741,7 +1742,7 @@ class Game_engine extends React.Component {
 function engine(squares, castling, enpassent, history, move50, turn) {
 
   var best = Infinity
-  var moveBest
+  var moveBest = 0
 
   var evaluation
 
@@ -1767,7 +1768,7 @@ function engine(squares, castling, enpassent, history, move50, turn) {
           let newSquares = pretendPromotion(getSquare(move, squares), square, squares, enpassent, 3)
           evaluation = engine_moves(newSquares, castling, 0, !turn, history.concat([squares]), 0, 0.5, alpha1, beta1)
 
-          if(evaluation < best) { moveBest=updateMove(square, move, 3) }
+          if(evaluation < best || moveBest===0) { moveBest=updateMove(square, move, 3) }
           best = Math.min(best, evaluation)
           beta1 = Math.min(beta1, evaluation)
           if(beta1 <= alpha1) { return best }
@@ -1776,7 +1777,7 @@ function engine(squares, castling, enpassent, history, move50, turn) {
           newSquares = pretendPromotion(getSquare(move, squares), square, squares, enpassent, 5)
           evaluation = engine_moves(newSquares, castling, 0, !turn, history.concat([squares]), 0, 0.5, alpha1, beta1)
 
-          if(evaluation < best) { moveBest=updateMove(square, move, 5) }
+          if(evaluation < best || moveBest===0) { moveBest=updateMove(square, move, 5) }
           best = Math.min(best, evaluation)
           beta1 = Math.min(beta1, evaluation)
           if(beta1 <= alpha1) { return best }
@@ -1791,7 +1792,7 @@ function engine(squares, castling, enpassent, history, move50, turn) {
           //saves the best evaluation if that move is made
           evaluation = engine_moves(gameState[0], gameState[1], gameState[2], !turn, history.concat([squares]), newMove50, 0.5, alpha1, beta1)
 
-          if(evaluation < best) { moveBest=updateMove(square, move, 0) }
+          if(evaluation < best || moveBest===0) { moveBest=updateMove(square, move, 0) }
           best = Math.min(best, evaluation)
           beta1 = Math.min(beta1, evaluation)
           if(beta1 <= alpha1) { return best }
