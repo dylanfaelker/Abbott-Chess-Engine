@@ -1,35 +1,3 @@
-<!--
-*** Thanks for checking out the Best-README-Template. If you have a suggestion
-*** that would make this better, please fork the repo and create a pull request
-*** or simply open an issue with the tag "enhancement".
-*** Thanks again! Now go create something AMAZING! :D
--->
-
-
-
-<!-- TABLE OF CONTENTS -->
-<details open="open">
-  <summary>Table of Contents</summary>
-  <ol>
-    <li>
-      <a href="#about-the-project">About The Project</a>
-      <ul>
-        <li><a href="#how-the-ai-thinks">How the AI thinks</a></li>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
-    </li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-    </li>
-    <li><a href="#roadmap">Roadmap</a></li>
-    <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#license">License</a></li>
-    <li><a href="#contact">Contact</a></li>
-  </ol>
-</details>
-
-
-
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
@@ -37,7 +5,7 @@ If you want to learn about the variant of chess that this AI is made for, check 
 
 ### How the AI thinks
 
-The AI creates a minimax tree of all the positions reachable after 1 full turn (1move black, 1 move white) and does a static evaluation from there. 
+The AI creates a negamax tree of all the positions reachable after 1 full turn (1move black, 1 move white) and does a static evaluation from there. 
 As it is going through the positions, it is also implementing a an alpha beta pruning algorithm to imporve efficiency,
 
 In the static evaluation, the computer looks at three things.
@@ -68,10 +36,6 @@ For each piece attacking a square near the king more than a piece defending that
 0.25 points are taken for each level of weakness around your king.
 
 
-### Built With
-
-* [React.js](https://reactjs.org/)
-
 
 
 <!-- GETTING STARTED -->
@@ -81,7 +45,38 @@ It can be played on my website at [dylanfaelker.com](https://www.dylanfaelker.co
 
 Go to Infinity Chess in the menu bar, scroll down a little and click 'Play against chess AI (Abbott)'
 
+### Project layout
 
+* `app.py` is the Flask entrypoint
+* `infinity_chess` houses the chess logic
+* `engine` houses the engine logic
+* `requirements.txt` defines Python dependencies
+* `render.yaml` defines the Render web service
+
+### Local development
+
+1. Create and activate a virtual environment
+2. Run `pip install -r requirements.txt`
+3. Run `python app.py`
+
+The server will listen on `http://localhost:5000`.
+
+On Windows, `requirements.txt` skips `gunicorn` automatically because Gunicorn is only used on Render's Linux runtime.
+
+### Deploy on Render
+
+1. Push this repository to GitHub
+2. In Render, create a new Blueprint and point it at this repository
+3. Render will read `render.yaml`
+4. Render will install Python dependencies with `pip install -r requirements.txt`
+5. Render will start the app with `gunicorn --bind 0.0.0.0:$PORT app:app`
+
+If you prefer manual setup instead of a Blueprint, use these values in a Render Web Service:
+
+* Runtime: `Python`
+* Build Command: `pip install -r requirements.txt`
+* Start Command: `gunicorn --bind 0.0.0.0:$PORT app:app`
+* Health Check Path: `/api/health`
 
 
 
@@ -91,19 +86,13 @@ Go to Infinity Chess in the menu bar, scroll down a little and click 'Play again
 See the [open issues](https://github.com/othneildrew/Best-README-Template/issues) for a list of proposed features (and known issues).
 
 
+## API endpoints
+The API currently exposes:
 
-<!-- CONTRIBUTING -->
-## Contributing
+* `GET /api/health`
+* `POST /api/move`
 
-Contributions are what make the open source community such an amazing place to be learn, inspire, and create. Any contributions you make are **greatly appreciated**.
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-
+`/api/move` returns the engines best move for a given position
 
 <!-- LICENSE -->
 ## License
@@ -115,7 +104,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 <!-- CONTACT -->
 ## Contact
 
-Dylan Faelker - [linkedin](https://www.linkedin.com/in/dylanfaelker/) - faelkerd@gmail.com
+Dylan Faelker - [linkedin](https://www.linkedin.com/in/dylanfaelker/)
 
 Project Link: [https://github.com/dylpykill/Abbott-Chess-Engine](https://github.com/dylpykill/Abbott-Chess-Engine)
 
