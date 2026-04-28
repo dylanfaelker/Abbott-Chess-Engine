@@ -36,6 +36,7 @@ class Evaluator:
         score = 0
         score += self._material(board)
         score += self._control(board)
+        score += self._initiative(board)
         return score
 
     def _material(self, board: Board) -> int:
@@ -111,3 +112,6 @@ class Evaluator:
         if colour == Colour.WHITE:
             return target.rank >= half
         return target.rank < half
+    
+    def _initiative(self, board: Board) -> int:
+        return 10 if board.turn == Colour.WHITE else -10
