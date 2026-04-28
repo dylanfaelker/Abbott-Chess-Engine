@@ -47,7 +47,10 @@ class Square:
         return Square(rank=rank, file=file)
 
     def __add__(self, other: tuple[int, int]) -> "Square":
-        """Convenient offset: Square(3, 4) + (1, 0) → Square(4, 4)."""
+        """
+        Convenient offset: Square(3, 4) + (1, 0) → Square(4, 4).
+        - (Rank, File)
+        """
         return Square(self.rank + other[0], self.file + other[1])
 
     def __repr__(self) -> str:
