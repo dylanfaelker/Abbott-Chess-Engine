@@ -112,7 +112,7 @@ class StandardRules(RuleSet):
         if generator:
             if piece.piece_type == PieceType.KING:
                 yield from self._king_moves(board, sq, piece, skip_castling=_for_attack_check)
-            if piece.piece_type == PieceType.PAWN:
+            elif piece.piece_type == PieceType.PAWN:
                 yield from self._pawn_moves(board, sq, piece, only_attacks=_for_attack_check)
             else:
                 yield from generator(board, sq, piece)
