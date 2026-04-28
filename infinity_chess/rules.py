@@ -350,7 +350,7 @@ class InfinityChessRules(StandardRules):
 
         # Captures (diagonal)
         for file_delta in (-1, 1):
-            capture_sq = self._wrap_square(sq + (direction, file_delta))
+            capture_sq = self.wrap_square(sq + (direction, file_delta))
             if not board.in_bounds(capture_sq):
                 continue
 
@@ -370,7 +370,7 @@ class InfinityChessRules(StandardRules):
     def _knight_moves(self, board: Board, sq: Square, piece: Piece) -> Iterator[Move]:
         offsets = [(-2,-1),(-2,1),(-1,-2),(-1,2),(1,-2),(1,2),(2,-1),(2,1)]
         for dr, df in offsets:
-            target = self._wrap_square(sq + (dr, df))
+            target = self.wrap_square(sq + (dr, df))
             if not board.in_bounds(target):
                 continue
             occupant = board.get(target)
@@ -389,7 +389,7 @@ class InfinityChessRules(StandardRules):
             directions += [(1,1),(1,-1),(-1,1),(-1,-1)]
 
         for dr, df in directions:
-            current = self._wrap_square(sq + (dr, df))
+            current = self.wrap_square(sq + (dr, df))
             while board.in_bounds(current):
                 occupant = board.get(current)
                 if occupant is None:
@@ -406,7 +406,7 @@ class InfinityChessRules(StandardRules):
             for df in (-1, 0, 1):
                 if dr == 0 and df == 0:
                     continue
-                target = self._wrap_square(sq + (dr, df))
+                target = self.wrap_square(sq + (dr, df))
                 if not board.in_bounds(target):
                     continue
                 occupant = board.get(target)
