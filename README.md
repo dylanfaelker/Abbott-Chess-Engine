@@ -76,7 +76,7 @@ If you prefer manual setup instead of a Blueprint, use these values in a Render 
 * Runtime: `Python`
 * Build Command: `pip install -r requirements.txt`
 * Start Command: `gunicorn --bind 0.0.0.0:$PORT app:app`
-* Health Check Path: `/api/health`
+* Health Check Path: `/health`
 
 
 
@@ -89,10 +89,10 @@ See the [open issues](https://github.com/othneildrew/Best-README-Template/issues
 ## API endpoints
 The API currently exposes:
 
-* `GET /api/health`
-* `POST /api/move`
+* `GET /health`
+* `POST /move`
 
-`/api/move` returns the engines best move for a given position
+`/move` returns the engines best move for a given position
 
 <!-- LICENSE -->
 ## License
