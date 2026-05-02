@@ -12,7 +12,7 @@ from engine.search import Search
 from engine.evaluate import Evaluator
 
 app = Flask(__name__)
-CORS(app, origins=["https://dylanfaelker.com", "http://localhost:3000"])
+CORS(app, origins=["https://www.dylanfaelker.com", "http://localhost:3000"])
 
 @app.route("/health", methods=["GET"])
 def health():
