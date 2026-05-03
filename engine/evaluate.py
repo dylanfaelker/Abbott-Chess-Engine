@@ -157,7 +157,7 @@ class Evaluator:
                 score += 5# * count
 
         # Black control
-        for target, count in white_attacks.items():
+        for target, count in black_attacks.items():
             if self._is_other_side(board, Colour.BLACK, target):
                 score -= 10# * count
             else:
