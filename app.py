@@ -20,8 +20,6 @@ def health():
     return jsonify({"status": "ok"}), 200
 
 
-#TODO handle drawing 3 fold repition if bot is still winning in second best move. Would this even be an issue if search depth is above 3.
-
 @app.route("/move", methods=["POST"])
 def get_move():
     """

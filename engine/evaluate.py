@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from collections import Counter
 
+import random
+
 from infinity_chess.board import Board
 from infinity_chess.move import Square
 from infinity_chess.pieces import Piece, PieceType, Colour
@@ -106,13 +108,20 @@ class Evaluator:
     Extend this class to add custom evaluation terms for your variant.
     """
 
+    def __init__(self, isVary: bool = True):
+        self.isVary = isVary
+
     def evaluate(self, board: Board) -> int:
         """Score in centipawns from White's perspective."""
         score = 0
         score += self._material(board)
         score += self._control(board)
         score += self._initiative(board)
-        score += self._positioning(board)
+        score += self._piece_square(board)
+
+        if self.isVary:
+            score += random.randint(-5, 5)
+
         return score
 
     def _material(self, board: Board) -> int:
@@ -143,23 +152,23 @@ class Evaluator:
         # White control
         for target, count in white_attacks.items():
             if self._is_other_side(board, Colour.WHITE, target):
-                score += 20# * count
-            else:
                 score += 10# * count
+            else:
+                score += 5# * count
 
         # Black control
         for target, count in white_attacks.items():
             if self._is_other_side(board, Colour.BLACK, target):
-                score -= 20# * count
-            else:
                 score -= 10# * count
+            else:
+                score -= 5# * count
 
         # White king danger
         white_king_sq = board.find_piece(PieceType.KING, Colour.WHITE)
         for target in self._king_ring(board, white_king_sq, rules):
             pressure = black_attacks[target] - white_attacks[target]
             if pressure > 0:
-                score -= pressure * 25
+                score -= pressure * 20
 
 
         # Black king danger
@@ -167,7 +176,7 @@ class Evaluator:
         for target in self._king_ring(board, black_king_sq, rules):
             pressure = white_attacks[target] - black_attacks[target]
             if pressure > 0:
-                score += pressure * 25
+                score += pressure * 20
 
         return score
 
@@ -190,9 +199,12 @@ class Evaluator:
     
     def _initiative(self, board: Board) -> int:
         """Bonus for whoever gets the next move"""
-        return 10 if board.turn == Colour.WHITE else -10
+
+        INITIATIVE_VAL = 20
+
+        return INITIATIVE_VAL / 2 if board.turn == Colour.WHITE else -1 * INITIATIVE_VAL / 2
     
-    def _positioning(self, board: Board) -> int:
+    def _piece_square(self, board: Board) -> int:
         """Bonus for pieces on good squares. Only applies to 8x8 boards."""
         if board.ranks != 8 or board.files != 8:
             return 0
