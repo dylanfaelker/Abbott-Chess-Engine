@@ -3,39 +3,13 @@
 
 If you want to learn about the variant of chess that this AI is made for, check out my repository for it [here](https://github.com/dylpykill/Infinity-Chess)
 
-### How the AI thinks
+## The AI explained
 
-The AI creates a negamax tree of all the positions reachable after 1 full turn (1move black, 1 move white) and does a static evaluation from there. 
-As it is going through the positions, it is also implementing a an alpha beta pruning algorithm to imporve efficiency,
+https://github.com/dylanfaelker/Abbott-Chess-Engine/blob/main/Abbott_Explained.md
 
-In the static evaluation, the computer looks at three things.
- * How much material each team has (pieces).
- * How many squares each team controls. More points are given to control over points on the opposing side of the board to encourage attacking.
- * How safe the king is. How weak are the squares surrounding the king.
+## Releases
 
-Chess piece are usually given this set of points.
-
-Pawn = 1
-
-Knight = 3
-
-Bishop = 3
-
-Rook = 5
-
-Queen = 9
-
-For infinity chess, I decided to give bishops 4 points because of how tricky they can be with the wrapping edge.
-
-When calculating control of squares, squares are not counted multiple times. For example if a bishop and a kight are both attacking d4, the points are only given for control of d4 once.
-If a team controls a square on its side of the board, 0.1 points are given.
-If a team controls a square on the opponents side of the baord, 0.2 points are given.
-
-King safety is mesured in the level of control of the squares the other team has around your teams king.
-For each piece attacking a square near the king more than a piece defending that square, the level goes up. Note that the level cannot be negative. Also note that the kings defense of the square is not coutned. For example, if the king is on h2 and there is a bishop and knight attacking that h3 with only a queen defending it, the level is 1. However, if two pawns are supporting it then the level is 0.
-0.25 points are taken for each level of weakness around your king.
-
-
+https://github.com/dylanfaelker/Abbott-Chess-Engine/blob/main/Releases.md
 
 
 <!-- GETTING STARTED -->
@@ -43,7 +17,7 @@ For each piece attacking a square near the king more than a piece defending that
 
 It can be played on my website at [dylanfaelker.com](https://www.dylanfaelker.com/).
 
-Go to Infinity Chess in the menu bar, scroll down a little and click 'Play against chess AI (Abbott)'
+Go to Infinity Chess under projects, scroll down a little and click 'Play against chess AI (Abbott)'
 
 ### Project layout
 
@@ -56,8 +30,9 @@ Go to Infinity Chess in the menu bar, scroll down a little and click 'Play again
 ### Local development
 
 1. Create and activate a virtual environment
-2. Run `pip install -r requirements.txt`
-3. Run `python app.py`
+2. Run `python -m venv .venv` to set up the venv
+2. Run `.\.venv\Scripts\python.exe -m pip install -r requirements.txt` to install the libraries
+3. Run `.\.venv\Scripts\python.exe app.py` to run the server
 
 The server will listen on `http://localhost:5000`.
 

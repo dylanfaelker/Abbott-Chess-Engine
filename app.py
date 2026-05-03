@@ -9,7 +9,7 @@ from infinity_chess.move import Square, Move
 from infinity_chess.move_generator import MoveGenerator
 from infinity_chess.rules import InfinityChessRules
 from engine.search import Search
-from engine.evaluate import Evaluator
+from engine_v2_1.search import Search as Search_v2_1
 
 app = Flask(__name__)
 CORS(app, origins=["https://www.dylanfaelker.com", "http://localhost:3000"])
@@ -20,21 +20,21 @@ def health():
     return jsonify({"status": "ok"}), 200
 
 
-#TODO handle drawing 3 fold repition if bot is still winning in second best move. Would this even be an issue if search depth is above 3.
-
 @app.route("/move", methods=["POST"])
 def get_move():
     """
     Get the engine's best move for a given position.
  
     Request body:
-        fen   (str):  FEN string of the current position
-        depth (int):  Search depth (default: 2, max: 8). Higher = stronger but slower.
+        fen    (str):  FEN string of the current position
+        depth  (int):  Search depth (default: 2, max: 8). Higher = stronger but slower.
+        engine (str):  Engine version (defaults to latest engine).
  
     Response:
-        move  (str):  Best move in UCI format e.g. "e2e4", "e7e8q"
-        eval  (float): Centipawn evaluation from the perspective of the side to move
-        depth (int):  Depth actually searched
+        move   (str):   Best move in UCI format e.g. "e2e4", "e7e8q"
+        eval   (float): Centipawn evaluation from the perspective of the side to move
+        depth  (int):   Depth actually searched
+        engine (str):   Actual engine used
     """
     data = request.get_json()
  
@@ -46,9 +46,17 @@ def get_move():
     depth = max(1, min(depth, 8))
  
     try:
-        board = Board.from_fen(data["fen"])
+        board = Board.from_fen(fen)
     except ValueError:
         return jsonify({"error": "Invalid FEN string"}), 400
+    
+    # Choosing the engine
+    engine = data.get("engine", "latest")
+    if engine == "v2.1":
+        searcher = Search_v2_1(board)
+    else:
+        engine = "v2.2"
+        searcher = Search(board)
  
     gen = MoveGenerator(board, InfinityChessRules())
     over, result = gen.game_over()
@@ -56,7 +64,6 @@ def get_move():
         return jsonify({"error": "Game is already over", "result": result}), 400
  
     try:
-        searcher = Search(board)
         best_move, score = searcher.find_best_move(depth)
 
         if best_move is None:
@@ -66,6 +73,7 @@ def get_move():
             "move": best_move.to_uci(),
             "eval": score / 100.0,
             "depth": depth,
+            "engine": engine,
         }), 200
  
     except Exception as e:
