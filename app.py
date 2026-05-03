@@ -55,7 +55,7 @@ def get_move():
     engine = data.get("engine", "latest")
     if engine == "v2.1":
         searcher = Search_v2_1(board)
-    if engine == "v2.2":
+    elif engine == "v2.2":
         searcher = Search_v2_2(board)
     else:
         engine = "v2.3"
