@@ -10,6 +10,7 @@ from infinity_chess.move_generator import MoveGenerator
 from infinity_chess.rules import InfinityChessRules
 from engine.search import Search
 from engine_v2_1.search import Search as Search_v2_1
+from engine_v2_2.search import Search as Search_v2_2
 
 app = Flask(__name__)
 CORS(app, origins=["https://dylanfaelker.com", "http://localhost:3000"])
@@ -54,8 +55,10 @@ def get_move():
     engine = data.get("engine", "latest")
     if engine == "v2.1":
         searcher = Search_v2_1(board)
+    if engine == "v2.2":
+        searcher = Search_v2_2(board)
     else:
-        engine = "v2.2"
+        engine = "v2.3"
         searcher = Search(board)
  
     gen = MoveGenerator(board, InfinityChessRules())
