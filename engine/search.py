@@ -20,7 +20,7 @@ class Search:
     def __init__(self, board: Board, rules: RuleSet | None = None, isVary: bool = True):
         """Create a search object for a board position and ruleset."""
         self.board = board
-        self.generator = MoveGenerator(board, rules)
+        self.rules = rules
         self.evaluator = Evaluator(isVary)
         self.transposition_table: dict[int, dict] = {}
         self.killer_moves: list[list] = [[None, None] for _ in range(64)]
@@ -47,8 +47,7 @@ class Search:
     #     results = []
     #     for move in self._ordered_moves(self.board, 0):
     #         new_board = self.board.apply_move(move)
-    #         child = Search(new_board, self.generator.rules, self.isVary)
-    #         score = -child._negamax(depth - 1, -INF, INF, 1)
+    #         score = -self._negamax(new_board, depth - 1, -INF, INF, 1)
     #         results.append({"move": move, "score": score, "pv": [move,]}) #TODO put in the full principal variation
 
     #     results.sort(key=lambda r: r["score"], reverse=True)
@@ -62,8 +61,7 @@ class Search:
 
         for move in self._ordered_moves(self.board, 0):
             new_board = self.board.apply_move(move)
-            child = Search(new_board, self.generator.rules, self.isVary)
-            score = -child._negamax(depth - 1, -beta, -alpha, 1)
+            score = -self._negamax(new_board, depth - 1, -beta, -alpha, 1)
 
             if score > best_score:
                 best_score = score
@@ -72,12 +70,12 @@ class Search:
 
         return best_move, best_score
 
-    def _negamax(self, depth: int, alpha: float, beta: float, ply: int) -> int:
+    def _negamax(self, board: Board, depth: int, alpha: float, beta: float, ply: int) -> int:
         """Search a position with negamax, alpha-beta, and transposition lookups."""
         self.nodes_searched += 1
 
         # Checking if position was already computed via transpotion table.
-        key = self.board.zobrist_hash()
+        key = board.zobrist_hash()
         tt_entry = self.transposition_table.get(key)
         if tt_entry and tt_entry["depth"] >= depth:
             flag, tt_score = tt_entry["flag"], tt_entry["score"]
@@ -85,26 +83,24 @@ class Search:
             if flag == "lower" and tt_score >= beta:  return tt_score
             if flag == "upper" and tt_score <= alpha: return tt_score
 
-        over, result = self.generator.game_over()
+        gen = MoveGenerator(board, self.rules)
+        over, result = gen.game_over()
         if over:
             if result in ("white", "black"):
                 loser = Colour.WHITE if result == "black" else Colour.BLACK
-                return -(MATE_SCORE - ply) if self.board.turn == loser else (MATE_SCORE - ply) # to prefer earlier mates
+                return -(MATE_SCORE - ply) if board.turn == loser else (MATE_SCORE - ply) # to prefer earlier mates
             return 0 # draw
 
         if depth == 0:
-            return self._quiescence(alpha, beta)
+            return self._quiescence(board, alpha, beta)
 
         original_alpha = alpha
         best_score = -INF
         best_move = None
 
-        for move in self._ordered_moves(self.board, ply):
-            new_board = self.board.apply_move(move)
-            child = Search(new_board, self.generator.rules, self.isVary)
-            child.transposition_table = self.transposition_table
-            child.killer_moves = self.killer_moves
-            score = -child._negamax(depth - 1, -beta, -alpha, ply + 1)
+        for move in self._ordered_moves(board, ply):
+            new_board = board.apply_move(move)
+            score = -self._negamax(new_board, depth - 1, -beta, -alpha, ply + 1)
 
             if score > best_score:
                 best_score = score
@@ -125,21 +121,20 @@ class Search:
 
         return best_score
 
-    def _quiescence(self, alpha: float, beta: float) -> int:
+    def _quiescence(self, board: Board, alpha: float, beta: float) -> int:
         """Extend leaf search through captures and checks. Combats horizon effect."""
-        score = self.evaluator.evaluate(self.board) # stand-pat
-        if self.board.turn == Colour.BLACK:
+        score = self.evaluator.evaluate(board) # stand-pat
+        if board.turn == Colour.BLACK:
             score = -score
 
         if score >= beta:  return beta
         alpha = max(alpha, score)
 
-        for move in self._ordered_moves(self.board, 0):
+        for move in self._ordered_moves(board, 0):
 
             if move.flag == MoveFlag.CAPTURE:
-                new_board = self.board.apply_move(move)
-                child = Search(new_board, self.generator.rules, self.isVary)
-                s = -child._quiescence(-beta, -alpha)
+                new_board = board.apply_move(move)
+                s = -self._quiescence(new_board, -beta, -alpha)
                 if s >= beta:  return beta
                 alpha = max(alpha, s)
 
@@ -147,7 +142,7 @@ class Search:
 
     def _ordered_moves(self, board: Board, ply: int):
         """Return legal moves sorted by simple tactical and killer-move heuristics."""
-        gen = MoveGenerator(board, self.generator.rules)
+        gen = MoveGenerator(board, self.rules)
         moves = gen.legal_moves()
         scored = []
 
