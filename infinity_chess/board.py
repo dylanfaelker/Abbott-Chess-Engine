@@ -7,7 +7,6 @@ Pure data class
 """
 
 from __future__ import annotations
-from copy import deepcopy
 from typing import Optional, Iterator
 
 from infinity_chess.pieces import Piece, PieceType, Colour, make_piece
@@ -43,6 +42,20 @@ class Board:
         self.fullmove_number: int = 1
         self.history: list[Move] = []
         self.fen_history: list[str] = []  # piece-placement FEN after each move
+
+    # Custom copy function for cost efficiency
+    def copy(self) -> "Board":
+        new = Board.__new__(Board)
+        new.ranks = self.ranks
+        new.files = self.files
+        new.grid = [row[:] for row in self.grid]  # shallow copy rows (Pieces are frozen/immutable)
+        new.turn = self.turn
+        new.en_passant_sq = self.en_passant_sq
+        new.halfmove_clock = self.halfmove_clock
+        new.fullmove_number = self.fullmove_number
+        new.history = self.history[:]
+        new.fen_history = self.fen_history[:]
+        return new
 
     # ── Square access ─────────────────────────────────────────────────────────
 
@@ -81,7 +94,7 @@ class Board:
 
     def apply_move(self, move: Move) -> "Board":
         """Return a new Board with the move applied. Original is never mutated."""
-        new_board = deepcopy(self)
+        new_board = self.copy()
         new_board._apply_move_inplace(move)
         return new_board
 

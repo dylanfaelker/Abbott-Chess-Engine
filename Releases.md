@@ -1,3 +1,7 @@
+# V2.3
+- Efficiency improvements
+
+
 # V2.2
 - Adjusted centipawn values of Mobility, Control, and King Safety
     - Mobility now worth 5
