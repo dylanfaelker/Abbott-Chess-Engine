@@ -6,7 +6,7 @@ Negamax search with alpha-beta pruning, move ordering, and transposition table.
 
 from __future__ import annotations
 from infinity_chess.board import Board
-from infinity_chess.move import Move, MoveFlag
+from infinity_chess.move import Move, MoveFlag, SpecialMove
 from infinity_chess.move_generator import MoveGenerator
 from engine.evaluate import Evaluator, PIECE_VALUES
 from infinity_chess.pieces import Colour
@@ -108,7 +108,7 @@ class Search:
             alpha = max(alpha, score)
 
             if alpha >= beta: # beta-cutoff -> killer move
-                if move.flag != MoveFlag.CAPTURE: # killer moves are only "quite" moves
+                if move.flag != MoveFlag.CAPTURE and move.flag != MoveFlag.EN_PASSANT: # killer moves are only "quite" moves
                     self.killer_moves[ply][1] = self.killer_moves[ply][0]
                     self.killer_moves[ply][0] = move
                 break
@@ -132,7 +132,7 @@ class Search:
 
         for move in self._ordered_moves(board, 0):
 
-            if move.flag == MoveFlag.CAPTURE:
+            if move.flag == MoveFlag.CAPTURE or move.flag == MoveFlag.EN_PASSANT:
                 new_board = board.apply_move(move)
                 s = -self._quiescence(new_board, -beta, -alpha)
                 if s >= beta:  return beta
@@ -161,8 +161,11 @@ class Search:
                 score = 100_000
 
             # MVV-LVA Hueristic
-            elif move.flag == MoveFlag.CAPTURE:
-                victim   = board.get(move.to_sq)
+            elif move.flag in (MoveFlag.CAPTURE, MoveFlag.EN_PASSANT):
+                victim_sq = move.to_sq
+                if isinstance(move, SpecialMove):
+                    victim_sq = move.captured_sq or move.to_sq
+                victim = board.get(victim_sq)
                 attacker = board.get(move.from_sq)
                 v_val = PIECE_VALUES.get(victim.piece_type, 0)   if victim   else 0
                 a_val = PIECE_VALUES.get(attacker.piece_type, 0) if attacker else 0
