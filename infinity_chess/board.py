@@ -2,11 +2,12 @@
 infinity_chess/board.py
 
 Board state: the grid, piece positions, and game metadata.
-
-Pure data class
+Backed by bitboards plus move undo support.
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 from typing import Optional, Iterator
 
 from infinity_chess.pieces import Piece, PieceType, Colour, make_piece
@@ -15,27 +16,43 @@ from infinity_chess.pieces import B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B
 from infinity_chess.move import Square, Move, SpecialMove, MoveFlag
 
 
+_PIECE_CACHE: dict[tuple[PieceType, Colour, bool], Piece] = {}
+
+
+def _piece_obj(piece_type: PieceType, colour: Colour, has_moved: bool) -> Piece:
+    key = (piece_type, colour, has_moved)
+    piece = _PIECE_CACHE.get(key)
+    if piece is None:
+        piece = Piece(piece_type, colour, has_moved=has_moved)
+        _PIECE_CACHE[key] = piece
+    return piece
+
+
+@dataclass(frozen=True)
+class UndoState:
+    move: Move
+    moved_piece: Piece
+    captured_piece: Optional[Piece]
+    captured_sq: Optional[Square]
+    prev_en_passant_sq: Optional[Square]
+    prev_halfmove_clock: int
+    prev_fullmove_number: int
+    prev_turn: Colour
+    prev_moved_mask: int
+
+
 class Board:
     """
     The game board.
 
-    Attributes:
-        ranks:           Number of rows (default 8).
-        files:           Number of columns (default 8).
-        grid:            2D list [rank][file] of Piece | None.
-        turn:            Which colour moves next.
-        en_passant_sq:   Square a pawn can capture en passant to, or None.
-        halfmove_clock:  Moves since last capture or pawn push (for 50-move rule).
-        fullmove_number: Increments after Black's move.
-        history:         List of all moves played, oldest first.
+    Bitboards are the source of truth for piece placement. A flat occupancy cache
+    is maintained so square lookups stay O(1) without scanning all 12 bitboards.
     """
 
     def __init__(self, ranks: int = 8, files: int = 8):
         self.ranks = ranks
         self.files = files
-        self.grid: list[list[Optional[Piece]]] = [
-            [None] * files for _ in range(ranks)
-        ]
+        self._board_mask: int = (1 << (ranks * files)) - 1 # Bitboard full of 1s
         self.turn: Colour = Colour.WHITE
         self.en_passant_sq: Optional[Square] = None
         self.halfmove_clock: int = 0
@@ -43,30 +60,122 @@ class Board:
         self.history: list[Move] = []
         self.fen_history: list[str] = []  # piece-placement FEN after each move
 
-    # Custom copy function for cost efficiency
+        self.bitboards: dict[tuple[Colour, PieceType], int] = {
+            (colour, piece_type): 0
+            for colour in Colour
+            for piece_type in PieceType
+        }
+        self._moved_mask: int = 0
+        self._square_cache: list[Optional[tuple[PieceType, Colour]]] = [None] * (ranks * files)
+
     def copy(self) -> "Board":
         new = Board.__new__(Board)
         new.ranks = self.ranks
         new.files = self.files
-        new.grid = [row[:] for row in self.grid]  # shallow copy rows (Pieces are frozen/immutable)
+        new._board_mask = self._board_mask
         new.turn = self.turn
         new.en_passant_sq = self.en_passant_sq
         new.halfmove_clock = self.halfmove_clock
         new.fullmove_number = self.fullmove_number
         new.history = self.history[:]
         new.fen_history = self.fen_history[:]
+        new.bitboards = self.bitboards.copy()
+        new._moved_mask = self._moved_mask
+        new._square_cache = self._square_cache[:]
         return new
 
-    # ── Square access ─────────────────────────────────────────────────────────
+    def _index(self, sq: Square) -> int:
+        return sq.rank * self.files + sq.file
+
+    def _mask(self, sq: Square) -> int:
+        return 1 << self._index(sq)
+
+    def _square_from_index(self, idx: int) -> Square:
+        return Square(idx // self.files, idx % self.files)
+
+    @staticmethod
+    def _iter_bits(bitboard: int) -> Iterator[int]:
+        """ Iterator for indexes active bits."""
+        while bitboard:
+            lsb = bitboard & -bitboard
+            yield lsb.bit_length() - 1
+            bitboard ^= lsb
 
     def get(self, sq: Square) -> Optional[Piece]:
-        return self.grid[sq.rank][sq.file]
+        entry = self._square_cache[self._index(sq)]
+        if entry is None:
+            return None
+        piece_type, colour = entry
+        return _piece_obj(piece_type, colour, bool(self._moved_mask & self._mask(sq)))
 
     def set(self, sq: Square, piece: Optional[Piece]) -> None:
-        self.grid[sq.rank][sq.file] = piece
+        idx = self._index(sq)
+        mask = 1 << idx
+        current = self._square_cache[idx]
+
+        # handle removal of existing piece from square
+        if current is not None:
+            current_type, current_colour = current
+            self.bitboards[(current_colour, current_type)] &= ~mask # removes the existing piece from its bitboard
+            self._moved_mask &= ~mask # removes the square from the moved_mask
+            self._square_cache[idx] = None
+
+        if piece is None:
+            return
+
+        self.bitboards[(piece.colour, piece.piece_type)] |= mask
+        if piece.has_moved:
+            self._moved_mask |= mask
+        self._square_cache[idx] = (piece.piece_type, piece.colour)
+
+    def colour_bitboard(self, colour: Colour) -> int:
+        """Return all occupied squares for one side."""
+        return (
+            self.bitboards[(colour, PieceType.PAWN)]
+            | self.bitboards[(colour, PieceType.KNIGHT)]
+            | self.bitboards[(colour, PieceType.BISHOP)]
+            | self.bitboards[(colour, PieceType.ROOK)]
+            | self.bitboards[(colour, PieceType.QUEEN)]
+            | self.bitboards[(colour, PieceType.KING)]
+        )
+
+    def piece_bitboard(self, colour: Colour, piece_type: PieceType) -> int:
+        """Return the bitboard for one colour/piece-type pair."""
+        return self.bitboards[(colour, piece_type)]
+
+    def occupied_bitboard(self) -> int:
+        """Return all occupied squares on the board."""
+        return self.colour_bitboard(Colour.WHITE) | self.colour_bitboard(Colour.BLACK)
+
+    def empty_bitboard(self) -> int:
+        """Return all empty squares inside the board bounds."""
+        return self._board_mask ^ self.occupied_bitboard()
+
+    def opponent_bitboard(self, colour: Colour) -> int:
+        """Return all occupied squares for the opposing side."""
+        return self.colour_bitboard(colour.opponent())
+
+    def squares_in_bitboard(self, bitboard: int) -> Iterator[Square]:
+        """Yield squares contained in a bitboard, least-significant bit first."""
+        for idx in self._iter_bits(bitboard):
+            yield self._square_from_index(idx)
+
+    def first_square_in_bitboard(self, bitboard: int) -> Optional[Square]:
+        """
+        Return the least-significant square in a non-empty bitboard.
+        First means starting from a1, going across to h1, then a2 and so on
+        """
+        if bitboard == 0:
+            return None
+        idx = (bitboard & -bitboard).bit_length() - 1
+        return self._square_from_index(idx)
+
+    def bitboard_contains(self, bitboard: int, sq: Square) -> bool:
+        """Return True if the bitboard contains the given square."""
+        return bool(bitboard & self._mask(sq))
 
     def is_empty(self, sq: Square) -> bool:
-        return self.get(sq) is None
+        return self._square_cache[self._index(sq)] is None
 
     def in_bounds(self, sq: Square) -> bool:
         return 0 <= sq.rank < self.ranks and 0 <= sq.file < self.files
@@ -79,64 +188,64 @@ class Board:
                 yield Square(r, f)
 
     def pieces_for(self, colour: Colour) -> Iterator[tuple[Square, Piece]]:
-        for sq in self.all_squares():
+        for sq in self.squares_in_bitboard(self.colour_bitboard(colour)):
             piece = self.get(sq)
-            if piece and piece.colour == colour:
+            if piece is not None:
                 yield sq, piece
 
     def find_piece(self, piece_type: PieceType, colour: Colour) -> Optional[Square]:
-        for sq, piece in self.pieces_for(colour):
-            if piece.piece_type == piece_type:
-                return sq
-        return None
+        return self.first_square_in_bitboard(self.piece_bitboard(colour, piece_type))
 
     # ── Move application ──────────────────────────────────────────────────────
 
     def apply_move(self, move: Move) -> "Board":
         """Return a new Board with the move applied. Original is never mutated."""
         new_board = self.copy()
-        new_board._apply_move_inplace(move)
+        new_board.make_move(move)
         return new_board
 
-    def _apply_move_inplace(self, move: Move) -> None:
+    def make_move(self, move: Move) -> UndoState:
         piece = self.get(move.from_sq)
         if piece is None:
             raise ValueError(f"No piece on {move.from_sq}")
 
-        self.en_passant_sq = None
+        captured_sq: Optional[Square] = None
+        captured_piece: Optional[Piece] = None
 
-        if move.flag in (MoveFlag.CASTLE_KING, MoveFlag.CASTLE_QUEEN):
-            self._apply_castle(move)
-
-        elif move.flag == MoveFlag.EN_PASSANT:
-            captured_sq = (move.captured_sq
-                           if isinstance(move, SpecialMove) and move.captured_sq
-                           else move.to_sq)
-            self.set(captured_sq, None)
-            self.set(move.to_sq, piece.with_moved())
-            self.set(move.from_sq, None)
-
-        elif move.flag == MoveFlag.PROMOTION:
-            promo_name = (move.promotion_piece
-                          if isinstance(move, SpecialMove) and move.promotion_piece
-                          else "QUEEN")
-            promo_type = PieceType[promo_name.upper()]
-            self.set(move.to_sq, make_piece(promo_type, piece.colour))
-            self.set(move.from_sq, None)
-
+        if move.flag == MoveFlag.EN_PASSANT:
+            captured_sq = (
+                move.captured_sq
+                if isinstance(move, SpecialMove) and move.captured_sq is not None
+                else Square(move.from_sq.rank, move.to_sq.file)
+            )
+            captured_piece = self.get(captured_sq) # This should always be a pawn
+        elif move.flag == MoveFlag.CASTLE_KING or move.flag == MoveFlag.CASTLE_QUEEN:
+            captured_sq = None
         else:
-            self.set(move.to_sq, piece.with_moved())
-            self.set(move.from_sq, None)
+            captured_sq = move.to_sq
+            captured_piece = self.get(move.to_sq)
 
-            if piece.piece_type == PieceType.PAWN:
-                rank_diff = abs(move.to_sq.rank - move.from_sq.rank)
-                if rank_diff == 2:
-                    ep_rank = (move.from_sq.rank + move.to_sq.rank) // 2
-                    self.en_passant_sq = Square(ep_rank, move.from_sq.file)
+        undo = UndoState(
+            move=move,
+            moved_piece=piece,
+            captured_piece=captured_piece,
+            captured_sq=captured_sq if captured_piece is not None else None,
+            prev_en_passant_sq=self.en_passant_sq,
+            prev_halfmove_clock=self.halfmove_clock,
+            prev_fullmove_number=self.fullmove_number,
+            prev_turn=self.turn,
+            prev_moved_mask=self._moved_mask,
+        )
 
-        is_capture = move.flag in (MoveFlag.CAPTURE, MoveFlag.EN_PASSANT)
-        moved_piece = self.get(move.to_sq)
-        is_pawn_move = moved_piece and moved_piece.piece_type == PieceType.PAWN
+        self.en_passant_sq = None
+        self._apply_move_no_history(move, piece, captured_sq)
+
+        is_capture = captured_piece is not None
+        is_pawn_move = piece.piece_type == PieceType.PAWN
+
+        if is_pawn_move and abs(move.to_sq.rank - move.from_sq.rank) == 2:
+            ep_rank = (move.from_sq.rank + move.to_sq.rank) // 2
+            self.en_passant_sq = Square(ep_rank, move.from_sq.file)
 
         self.halfmove_clock = 0 if (is_capture or is_pawn_move) else self.halfmove_clock + 1
 
@@ -146,11 +255,75 @@ class Board:
         self.turn = self.turn.opponent()
         self.history.append(move)
         self.fen_history.append(self.to_fen_position())
+        return undo
 
-    def _apply_castle(self, move: Move) -> None:
-        piece = self.get(move.from_sq)
-        self.set(move.to_sq, piece.with_moved())
+    def unmake_move(self, undo: UndoState) -> None:
+        move = undo.move
+
+        if self.history:
+            self.history.pop()
+        if self.fen_history:
+            self.fen_history.pop()
+
+        if move.flag in (MoveFlag.CASTLE_KING, MoveFlag.CASTLE_QUEEN):
+            self.set(move.to_sq, None)
+            self.set(move.from_sq, undo.moved_piece)
+
+            rank = move.from_sq.rank
+            if move.flag == MoveFlag.CASTLE_KING:
+                rook_from = Square(rank, self.files - 1)
+                rook_to = Square(rank, move.to_sq.file - 1)
+            else:
+                rook_from = Square(rank, 0)
+                rook_to = Square(rank, move.to_sq.file + 1)
+
+            rook_piece = self.get(rook_to)
+            self.set(rook_to, None)
+            if rook_piece is not None:
+                original_rook = _piece_obj(rook_piece.piece_type, rook_piece.colour, False)
+                self.set(rook_from, original_rook)
+        else:
+            self.set(move.to_sq, None)
+            self.set(move.from_sq, undo.moved_piece)
+            if undo.captured_piece is not None and undo.captured_sq is not None:
+                self.set(undo.captured_sq, undo.captured_piece)
+
+        self.turn = undo.prev_turn
+        self.en_passant_sq = undo.prev_en_passant_sq
+        self.halfmove_clock = undo.prev_halfmove_clock
+        self.fullmove_number = undo.prev_fullmove_number
+        self._moved_mask = undo.prev_moved_mask
+
+    def _apply_move_no_history(
+        self,
+        move: Move,
+        piece: Piece,
+        captured_sq: Optional[Square],
+    ) -> None:
+        if captured_sq is not None:
+            self.set(captured_sq, None)
+
+        if move.flag in (MoveFlag.CASTLE_KING, MoveFlag.CASTLE_QUEEN):
+            self._apply_castle(move, piece)
+            return
+
         self.set(move.from_sq, None)
+
+        if move.flag == MoveFlag.PROMOTION:
+            promo_name = (
+                move.promotion_piece
+                if isinstance(move, SpecialMove) and move.promotion_piece
+                else "QUEEN"
+            )
+            promo_type = PieceType[promo_name.upper()]
+            self.set(move.to_sq, _piece_obj(promo_type, piece.colour, True))
+            return
+
+        self.set(move.to_sq, piece.with_moved())
+
+    def _apply_castle(self, move: Move, king: Piece) -> None:
+        self.set(move.from_sq, None)
+        self.set(move.to_sq, king.with_moved())
 
         rank = move.from_sq.rank
         if move.flag == MoveFlag.CASTLE_KING:
@@ -174,7 +347,7 @@ class Board:
             empty = 0
             row = ""
             for file in range(self.files):
-                piece = self.grid[rank][file]
+                piece = self.get(Square(rank, file))
                 if piece is None:
                     empty += 1
                 else:
@@ -260,7 +433,7 @@ class Board:
             board.set(Square(6, f), B_PAWN)
             board.set(Square(7, f), Piece(piece.piece_type, Colour.BLACK))
         return board
-    
+
     def _castling_rights(self) -> str:
         """Return the active castling rights string (e.g. 'KQk') for the current position."""
         rights = ""
@@ -293,16 +466,21 @@ class Board:
         'k': 0x9ef981efebe4f71a,
         'q': 0x5b9bc9438dbbeb34,
     }
-    
+
     def zobrist_hash(self) -> int:
         h = 0
  
-        # Pieces
-        for sq in self.all_squares():
-            piece = self.get(sq)
-            if piece:
-                piece_key = hash((piece.piece_type, piece.colour, sq.rank, sq.file))
-                h ^= piece_key * self._ZOBRIST_PIECE_MULTIPLIER
+        for colour in Colour:
+            for piece_type in PieceType:
+                piece_bb = self.bitboards[(colour, piece_type)]
+                while piece_bb:
+                    lsb = piece_bb & -piece_bb
+                    idx = lsb.bit_length() - 1
+                    sq = self._square_from_index(idx)
+                    has_moved = bool(self._moved_mask & lsb)
+                    piece_key = hash((piece_type, colour, sq.rank, sq.file, has_moved))
+                    h ^= piece_key * self._ZOBRIST_PIECE_MULTIPLIER
+                    piece_bb ^= lsb
  
         # Side to move
         if self.turn == Colour.BLACK:
@@ -323,7 +501,7 @@ class Board:
         for rank in range(self.ranks - 1, -1, -1):
             row = f"{rank + 1} "
             for file in range(self.files):
-                piece = self.grid[rank][file]
+                piece = self.get(Square(rank, file))
                 row += (piece.symbol() if piece else '.') + ' '
             lines.append(row)
         lines.append("  " + " ".join(chr(ord('a') + f) for f in range(self.files)))

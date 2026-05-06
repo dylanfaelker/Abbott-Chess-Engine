@@ -62,8 +62,7 @@ class Game:
         if move not in legal:
             return False
 
-        self.board = self.board.apply_move(move)
-        self.generator = MoveGenerator(self.board, self.rules)
+        self.board.make_move(move)
 
         over, result = self.generator.game_over()
         if over:

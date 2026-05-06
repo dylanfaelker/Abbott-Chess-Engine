@@ -1,5 +1,8 @@
 # V2.3
-- Efficiency improvements
+- Efficiency improvements (some of these also improved previous versions)
+- Bug fixes
+- Bitboards
+- make/unmake moves
 
 
 # V2.2

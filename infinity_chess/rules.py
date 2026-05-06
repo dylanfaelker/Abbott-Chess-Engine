@@ -80,8 +80,10 @@ class RuleSet(ABC):
         """
         for sq, piece in board.pieces_for(colour):
             for move in self.pseudo_legal_moves(board, sq):
-                candidate = board.apply_move(move)
-                if not self.is_in_check(candidate, colour):
+                undo = board.make_move(move)
+                in_check = self.is_in_check(board, colour)
+                board.unmake_move(undo)
+                if not in_check:
                     yield move
 
 

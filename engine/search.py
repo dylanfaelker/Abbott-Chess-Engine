@@ -60,8 +60,9 @@ class Search:
         alpha, beta = -INF, INF
 
         for move in self._ordered_moves(self.board, 0):
-            new_board = self.board.apply_move(move)
-            score = -self._negamax(new_board, depth - 1, -beta, -alpha, 1)
+            undo = self.board.make_move(move)
+            score = -self._negamax(self.board, depth - 1, -beta, -alpha, 1)
+            self.board.unmake_move(undo)
 
             if score > best_score:
                 best_score = score
@@ -99,8 +100,9 @@ class Search:
         best_move = None
 
         for move in self._ordered_moves(board, ply):
-            new_board = board.apply_move(move)
-            score = -self._negamax(new_board, depth - 1, -beta, -alpha, ply + 1)
+            undo = board.make_move(move)
+            score = -self._negamax(board, depth - 1, -beta, -alpha, ply + 1)
+            board.unmake_move(undo)
 
             if score > best_score:
                 best_score = score
@@ -132,9 +134,10 @@ class Search:
 
         for move in self._ordered_moves(board, 0):
 
-            if move.flag == MoveFlag.CAPTURE or move.flag == MoveFlag.EN_PASSANT:
-                new_board = board.apply_move(move)
-                s = -self._quiescence(new_board, -beta, -alpha)
+            if move.flag in (MoveFlag.CAPTURE, MoveFlag.EN_PASSANT):
+                undo = board.make_move(move)
+                s = -self._quiescence(board, -beta, -alpha)
+                board.unmake_move(undo)
                 if s >= beta:  return beta
                 alpha = max(alpha, s)
 
