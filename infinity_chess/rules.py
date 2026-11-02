@@ -315,9 +315,8 @@ class StandardRules(RuleSet):
         return False
 
     def _is_threefold_repetition(self, board: Board) -> bool:
-        current = board.to_fen_position()
-        count = getattr(board, 'fen_history', []).count(current)
-        return count >= 3
+        current = board.zobrist_hash()
+        return board.zobrist_history.count(current) >= 2
 
 
 class InfinityChessRules(StandardRules):

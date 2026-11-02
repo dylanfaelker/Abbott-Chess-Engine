@@ -56,8 +56,7 @@ class Board:
         self.en_passant_sq: Optional[Square] = None
         self.halfmove_clock: int = 0
         self.fullmove_number: int = 1
-        self.history: list[Move] = []
-        self.fen_history: list[str] = []  # piece-placement FEN after each move
+        self.zobrist_history: list[int] = []  # position hashes after each move
 
         self.bitboards: dict[tuple[Colour, PieceType], int] = {
             (colour, piece_type): 0
@@ -76,8 +75,7 @@ class Board:
         new.en_passant_sq = self.en_passant_sq
         new.halfmove_clock = self.halfmove_clock
         new.fullmove_number = self.fullmove_number
-        new.history = self.history[:]
-        new.fen_history = self.fen_history[:]
+        new.zobrist_history = self.zobrist_history[:]
         new.bitboards = self.bitboards.copy()
         new._moved_mask = self._moved_mask
         new._square_cache = self._square_cache[:]
@@ -287,8 +285,7 @@ class Board:
             self.fullmove_number += 1
 
         self.turn = self.turn.opponent()
-        self.history.append(move)
-        self.fen_history.append(self.to_fen_position())
+        self.zobrist_history.append(self.zobrist_hash())
         return undo
 
     def unmake_move(self, undo: UndoState) -> None:
@@ -296,10 +293,8 @@ class Board:
         from_idx = self._index(move.from_sq)
         to_idx = self._index(move.to_sq)
 
-        if self.history:
-            self.history.pop()
-        if self.fen_history:
-            self.fen_history.pop()
+        if self.zobrist_history:
+            self.zobrist_history.pop()
 
         if move.flag in (MoveFlag.CASTLE_KING, MoveFlag.CASTLE_QUEEN):
             self._clear_index(to_idx)

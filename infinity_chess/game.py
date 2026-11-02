@@ -31,6 +31,7 @@ class Game:
         self.board: Board = board or Board.standard()
         self.rules: RuleSet = rules or StandardRules()
         self.generator: MoveGenerator = MoveGenerator(self.board, self.rules)
+        self.history: list[Move] = []
         self.result: Optional[str] = None
 
     # ── Game state ────────────────────────────────────────────────────────────
@@ -45,7 +46,7 @@ class Game:
 
     @property
     def move_count(self) -> int:
-        return len(self.board.history)
+        return len(self.history)
 
     # ── Making moves ──────────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ class Game:
             return False
 
         self.board.make_move(move)
+        self.history.append(move)
 
         over, result = self.generator.game_over()
         if over:
