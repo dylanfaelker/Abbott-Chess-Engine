@@ -426,22 +426,48 @@ class Board:
     @classmethod
     def from_fen(cls, fen: str) -> "Board":
         parts = fen.strip().split()
-        board = cls(8, 8)
-        rows = parts[0].split("/")
-        if len(rows) != 8:
-            raise ValueError(f"FEN has {len(rows)} rows, expected 8")
+        if not parts:
+            raise ValueError("FEN is missing piece placement")
 
-        for rank_idx, row in enumerate(reversed(rows)):
+        rows = parts[0].split("/")
+        parsed_rows: list[list[tuple[int, PieceType, Colour]]] = []
+        row_widths: list[int] = []
+        for row in rows:
             file_idx = 0
-            for ch in row:
-                if ch.isdigit():
-                    file_idx += int(ch)
+            pieces: list[tuple[int, PieceType, Colour]] = []
+            char_idx = 0
+            while char_idx < len(row):
+                ch = row[char_idx]
+                if "0" <= ch <= "9":
+                    run_end = char_idx + 1
+                    while run_end < len(row) and "0" <= row[run_end] <= "9":
+                        run_end += 1
+                    empty_count = int(row[char_idx:run_end])
+                    if empty_count == 0:
+                        raise ValueError("FEN empty-square counts must be one or more")
+                    file_idx += empty_count
+                    char_idx = run_end
                     continue
+
                 colour = Colour.WHITE if ch.isupper() else Colour.BLACK
                 piece_type = PieceType.from_symbol(ch)
+                pieces.append((file_idx, piece_type, colour))
+                file_idx += 1
+                char_idx += 1
+
+            parsed_rows.append(pieces)
+            row_widths.append(file_idx)
+
+        if not rows or row_widths[0] == 0:
+            raise ValueError("FEN piece placement must have at least one rank and file")
+        if any(width != row_widths[0] for width in row_widths):
+            raise ValueError(f"FEN rows have inconsistent widths: {row_widths}")
+
+        board = cls(len(rows), row_widths[0])
+        for rank_idx, row_pieces in enumerate(reversed(parsed_rows)):
+            for file_idx, piece_type, colour in row_pieces:
                 idx = rank_idx * board.files + file_idx
                 board._place_piece_at_index(idx, piece_type, colour, False)
-                file_idx += 1
 
         if len(parts) > 1:
             board.turn = Colour.WHITE if parts[1] == "w" else Colour.BLACK
@@ -460,13 +486,19 @@ class Board:
 
             white_has_castling = "K" in castling or "Q" in castling
             black_has_castling = "k" in castling or "q" in castling
+            king_home_file = board.files // 2
 
-            set_has_moved_idx(4, PieceType.KING, Colour.WHITE, not white_has_castling)
+            set_has_moved_idx(king_home_file, PieceType.KING, Colour.WHITE, not white_has_castling)
             set_has_moved_idx(0, PieceType.ROOK, Colour.WHITE, "Q" not in castling)
             set_has_moved_idx(board.files - 1, PieceType.ROOK, Colour.WHITE, "K" not in castling)
 
             black_rank_base = (board.ranks - 1) * board.files
-            set_has_moved_idx(black_rank_base + 4, PieceType.KING, Colour.BLACK, not black_has_castling)
+            set_has_moved_idx(
+                black_rank_base + king_home_file,
+                PieceType.KING,
+                Colour.BLACK,
+                not black_has_castling,
+            )
             set_has_moved_idx(black_rank_base, PieceType.ROOK, Colour.BLACK, "q" not in castling)
             set_has_moved_idx(
                 black_rank_base + board.files - 1,
@@ -507,14 +539,19 @@ class Board:
     def _castling_rights(self) -> str:
         """Return the active castling rights string (e.g. 'KQk') for the current position."""
         rights = ""
-        if self._has_unmoved_piece_at_index(4, PieceType.KING, Colour.WHITE):
+        king_home_file = self.files // 2
+        if self._has_unmoved_piece_at_index(king_home_file, PieceType.KING, Colour.WHITE):
             if self._has_unmoved_piece_at_index(self.files - 1, PieceType.ROOK, Colour.WHITE):
                 rights += "K"
             if self._has_unmoved_piece_at_index(0, PieceType.ROOK, Colour.WHITE):
                 rights += "Q"
 
         black_rank_base = (self.ranks - 1) * self.files
-        if self._has_unmoved_piece_at_index(black_rank_base + 4, PieceType.KING, Colour.BLACK):
+        if self._has_unmoved_piece_at_index(
+            black_rank_base + king_home_file,
+            PieceType.KING,
+            Colour.BLACK,
+        ):
             if self._has_unmoved_piece_at_index(
                 black_rank_base + self.files - 1,
                 PieceType.ROOK,

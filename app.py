@@ -54,12 +54,12 @@ def get_move():
     # Choosing the engine
     engine = data.get("engine", "latest")
     if engine == "v2.1":
-        searcher = Search_v2_1(board)
+        searcher = Search_v2_1(board, InfinityChessRules())
     elif engine == "v2.2":
-        searcher = Search_v2_2(board)
+        searcher = Search_v2_2(board, InfinityChessRules())
     else:
         engine = "v2.3"
-        searcher = Search(board)
+        searcher = Search(board, InfinityChessRules())
  
     gen = MoveGenerator(board, InfinityChessRules())
     over, result = gen.game_over()

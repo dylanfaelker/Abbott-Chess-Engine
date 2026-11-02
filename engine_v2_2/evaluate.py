@@ -200,9 +200,9 @@ class Evaluator:
     def _initiative(self, board: Board) -> int:
         """Bonus for whoever gets the next move"""
 
-        INITIATIVE_VAL = 20
+        INITIATIVE_VAL = 10
 
-        return INITIATIVE_VAL / 2 if board.turn == Colour.WHITE else -1 * INITIATIVE_VAL / 2
+        return INITIATIVE_VAL if board.turn == Colour.WHITE else -1 * INITIATIVE_VAL
     
     def _piece_square(self, board: Board) -> int:
         """Bonus for pieces on good squares. Only applies to 8x8 boards."""

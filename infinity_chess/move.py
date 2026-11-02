@@ -111,5 +111,8 @@ class SpecialMove(Move):
     def to_uci(self) -> str:
         base = super().to_uci()
         if self.promotion_piece:
-            return base + self.promotion_piece[0].lower()
+            if self.promotion_piece.lower() == "knight":
+                return base + "n"
+            else:
+                return base + self.promotion_piece[0].lower()
         return base

@@ -327,8 +327,9 @@ class InfinityChessRules(StandardRules):
     """
     
     @staticmethod
-    def wrap_square(sq: Square) -> Square:
-        return Square(sq.rank, sq.file % 8)
+    def wrap_square(sq: Square, board: Board) -> Square:
+        """Wrap a square's file around the width of ``board``."""
+        return Square(sq.rank, sq.file % board.files)
 
     def _pawn_moves(self, board: Board, sq: Square, piece: Piece, only_attacks: bool = False) -> Iterator[Move]:
         direction = 1 if piece.colour == Colour.WHITE else -1
@@ -352,7 +353,7 @@ class InfinityChessRules(StandardRules):
 
         # Captures (diagonal)
         for file_delta in (-1, 1):
-            capture_sq = self.wrap_square(sq + (direction, file_delta))
+            capture_sq = self.wrap_square(sq + (direction, file_delta), board)
             if not board.in_bounds(capture_sq):
                 continue
 
@@ -372,7 +373,7 @@ class InfinityChessRules(StandardRules):
     def _knight_moves(self, board: Board, sq: Square, piece: Piece) -> Iterator[Move]:
         offsets = [(-2,-1),(-2,1),(-1,-2),(-1,2),(1,-2),(1,2),(2,-1),(2,1)]
         for dr, df in offsets:
-            target = self.wrap_square(sq + (dr, df))
+            target = self.wrap_square(sq + (dr, df), board)
             if not board.in_bounds(target):
                 continue
             occupant = board.get(target)
@@ -391,7 +392,7 @@ class InfinityChessRules(StandardRules):
             directions += [(1,1),(1,-1),(-1,1),(-1,-1)]
 
         for dr, df in directions:
-            current = self.wrap_square(sq + (dr, df))
+            current = self.wrap_square(sq + (dr, df), board)
             while board.in_bounds(current):
                 occupant = board.get(current)
                 if occupant is None:
@@ -401,14 +402,14 @@ class InfinityChessRules(StandardRules):
                     break
                 else:
                     break  # Blocked by own piece. Will also block the infinite loop when you run into yourself via wrapping
-                current = current + (dr, df)
+                current = self.wrap_square(current + (dr, df), board)
 
     def _king_moves(self, board: Board, sq: Square, piece: Piece, skip_castling: bool = False) -> Iterator[Move]:
         for dr in (-1, 0, 1):
             for df in (-1, 0, 1):
                 if dr == 0 and df == 0:
                     continue
-                target = self.wrap_square(sq + (dr, df))
+                target = self.wrap_square(sq + (dr, df), board)
                 if not board.in_bounds(target):
                     continue
                 occupant = board.get(target)
