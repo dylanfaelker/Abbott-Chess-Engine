@@ -10,10 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Iterator
 
-from infinity_chess.pieces import Piece, PieceType, Colour, make_piece
-from infinity_chess.pieces import W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING
-from infinity_chess.pieces import B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING
-from infinity_chess.move import Square, Move, SpecialMove, MoveFlag
+from infinity_chess.move import Move, MoveFlag, SpecialMove, Square
+from infinity_chess.pieces import Colour, Piece, PieceType
 
 
 _PIECE_CACHE: dict[tuple[PieceType, Colour, bool], Piece] = {}
@@ -46,7 +44,8 @@ class Board:
     The game board.
 
     Bitboards are the source of truth for piece placement. A flat occupancy cache
-    is maintained so square lookups stay O(1) without scanning all 12 bitboards.
+    is maintained so public square lookups stay O(1) without scanning all 12
+    piece bitboards.
     """
 
     def __init__(self, ranks: int = 8, files: int = 8):
@@ -95,38 +94,69 @@ class Board:
 
     @staticmethod
     def _iter_bits(bitboard: int) -> Iterator[int]:
-        """ Iterator for indexes active bits."""
+        """ Iterator for indexes of active bits."""
         while bitboard:
             lsb = bitboard & -bitboard
             yield lsb.bit_length() - 1
             bitboard ^= lsb
 
-    def get(self, sq: Square) -> Optional[Piece]:
-        entry = self._square_cache[self._index(sq)]
+    @staticmethod
+    def _entry_symbol(piece_type: PieceType, colour: Colour) -> str:
+        symbol = piece_type.symbol()
+        return symbol.upper() if colour == Colour.WHITE else symbol
+
+    def _entry_at_index(self, idx: int) -> Optional[tuple[PieceType, Colour]]:
+        return self._square_cache[idx]
+
+    def _piece_at_index(self, idx: int) -> Optional[Piece]:
+        entry = self._square_cache[idx]
         if entry is None:
             return None
         piece_type, colour = entry
-        return _piece_obj(piece_type, colour, bool(self._moved_mask & self._mask(sq)))
+        has_moved = bool(self._moved_mask & (1 << idx))
+        return _piece_obj(piece_type, colour, has_moved)
+
+    def _clear_index(self, idx: int) -> None:
+        entry = self._square_cache[idx]
+        if entry is None:
+            return
+        piece_type, colour = entry
+        mask = 1 << idx
+        self.bitboards[(colour, piece_type)] &= ~mask
+        self._moved_mask &= ~mask
+        self._square_cache[idx] = None
+
+    def _place_piece_at_index(
+        self,
+        idx: int,
+        piece_type: PieceType,
+        colour: Colour,
+        has_moved: bool,
+    ) -> None:
+        mask = 1 << idx
+        self.bitboards[(colour, piece_type)] |= mask
+        if has_moved:
+            self._moved_mask |= mask
+        else:
+            self._moved_mask &= ~mask
+        self._square_cache[idx] = (piece_type, colour)
+
+    def _replace_index(self, idx: int, piece: Optional[Piece]) -> None:
+        self._clear_index(idx)
+        if piece is not None:
+            self._place_piece_at_index(idx, piece.piece_type, piece.colour, piece.has_moved)
+
+    def _has_unmoved_piece_at_index(self, idx: int, piece_type: PieceType, colour: Colour) -> bool:
+        entry = self._square_cache[idx]
+        if entry != (piece_type, colour):
+            return False
+        return not bool(self._moved_mask & (1 << idx))
+
+    def get(self, sq: Square) -> Optional[Piece]:
+        return self._piece_at_index(self._index(sq))
 
     def set(self, sq: Square, piece: Optional[Piece]) -> None:
-        idx = self._index(sq)
-        mask = 1 << idx
-        current = self._square_cache[idx]
-
-        # handle removal of existing piece from square
-        if current is not None:
-            current_type, current_colour = current
-            self.bitboards[(current_colour, current_type)] &= ~mask # removes the existing piece from its bitboard
-            self._moved_mask &= ~mask # removes the square from the moved_mask
-            self._square_cache[idx] = None
-
-        if piece is None:
-            return
-
-        self.bitboards[(piece.colour, piece.piece_type)] |= mask
-        if piece.has_moved:
-            self._moved_mask |= mask
-        self._square_cache[idx] = (piece.piece_type, piece.colour)
+        self._replace_index(self._index(sq), piece)
 
     def colour_bitboard(self, colour: Colour) -> int:
         """Return all occupied squares for one side."""
@@ -175,7 +205,7 @@ class Board:
         return bool(bitboard & self._mask(sq))
 
     def is_empty(self, sq: Square) -> bool:
-        return self._square_cache[self._index(sq)] is None
+        return self._entry_at_index(self._index(sq)) is None
 
     def in_bounds(self, sq: Square) -> bool:
         return 0 <= sq.rank < self.ranks and 0 <= sq.file < self.files
@@ -188,10 +218,10 @@ class Board:
                 yield Square(r, f)
 
     def pieces_for(self, colour: Colour) -> Iterator[tuple[Square, Piece]]:
-        for sq in self.squares_in_bitboard(self.colour_bitboard(colour)):
-            piece = self.get(sq)
+        for idx in self._iter_bits(self.colour_bitboard(colour)):
+            piece = self._piece_at_index(idx)
             if piece is not None:
-                yield sq, piece
+                yield self._square_from_index(idx), piece
 
     def find_piece(self, piece_type: PieceType, colour: Colour) -> Optional[Square]:
         return self.first_square_in_bitboard(self.piece_bitboard(colour, piece_type))
@@ -205,11 +235,13 @@ class Board:
         return new_board
 
     def make_move(self, move: Move) -> UndoState:
-        piece = self.get(move.from_sq)
+        from_idx = self._index(move.from_sq)
+        to_idx = self._index(move.to_sq)
+        piece = self._piece_at_index(from_idx)
         if piece is None:
             raise ValueError(f"No piece on {move.from_sq}")
 
-        captured_sq: Optional[Square] = None
+        captured_idx: Optional[int] = None
         captured_piece: Optional[Piece] = None
 
         if move.flag == MoveFlag.EN_PASSANT:
@@ -218,18 +250,17 @@ class Board:
                 if isinstance(move, SpecialMove) and move.captured_sq is not None
                 else Square(move.from_sq.rank, move.to_sq.file)
             )
-            captured_piece = self.get(captured_sq) # This should always be a pawn
-        elif move.flag == MoveFlag.CASTLE_KING or move.flag == MoveFlag.CASTLE_QUEEN:
-            captured_sq = None
-        else:
-            captured_sq = move.to_sq
-            captured_piece = self.get(move.to_sq)
+            captured_idx = self._index(captured_sq)
+            captured_piece = self._piece_at_index(captured_idx)
+        elif move.flag not in (MoveFlag.CASTLE_KING, MoveFlag.CASTLE_QUEEN):
+            captured_idx = to_idx
+            captured_piece = self._piece_at_index(to_idx)
 
         undo = UndoState(
             move=move,
             moved_piece=piece,
             captured_piece=captured_piece,
-            captured_sq=captured_sq if captured_piece is not None else None,
+            captured_sq=self._square_from_index(captured_idx) if captured_piece is not None else None,
             prev_en_passant_sq=self.en_passant_sq,
             prev_halfmove_clock=self.halfmove_clock,
             prev_fullmove_number=self.fullmove_number,
@@ -238,14 +269,17 @@ class Board:
         )
 
         self.en_passant_sq = None
-        self._apply_move_no_history(move, piece, captured_sq)
+        self._apply_move_no_history(move, from_idx, to_idx, piece, captured_idx)
 
         is_capture = captured_piece is not None
         is_pawn_move = piece.piece_type == PieceType.PAWN
+        from_rank = from_idx // self.files
+        to_rank = to_idx // self.files
 
-        if is_pawn_move and abs(move.to_sq.rank - move.from_sq.rank) == 2:
-            ep_rank = (move.from_sq.rank + move.to_sq.rank) // 2
-            self.en_passant_sq = Square(ep_rank, move.from_sq.file)
+        if is_pawn_move and abs(to_rank - from_rank) == 2:
+            ep_rank = (from_rank + to_rank) // 2
+            ep_file = from_idx % self.files
+            self.en_passant_sq = Square(ep_rank, ep_file)
 
         self.halfmove_clock = 0 if (is_capture or is_pawn_move) else self.halfmove_clock + 1
 
@@ -259,6 +293,8 @@ class Board:
 
     def unmake_move(self, undo: UndoState) -> None:
         move = undo.move
+        from_idx = self._index(move.from_sq)
+        to_idx = self._index(move.to_sq)
 
         if self.history:
             self.history.pop()
@@ -266,27 +302,40 @@ class Board:
             self.fen_history.pop()
 
         if move.flag in (MoveFlag.CASTLE_KING, MoveFlag.CASTLE_QUEEN):
-            self.set(move.to_sq, None)
-            self.set(move.from_sq, undo.moved_piece)
+            self._clear_index(to_idx)
+            self._place_piece_at_index(
+                from_idx,
+                undo.moved_piece.piece_type,
+                undo.moved_piece.colour,
+                undo.moved_piece.has_moved,
+            )
 
-            rank = move.from_sq.rank
+            rank_base = (from_idx // self.files) * self.files
             if move.flag == MoveFlag.CASTLE_KING:
-                rook_from = Square(rank, self.files - 1)
-                rook_to = Square(rank, move.to_sq.file - 1)
+                rook_from_idx = rank_base + self.files - 1
+                rook_to_idx = to_idx - 1
             else:
-                rook_from = Square(rank, 0)
-                rook_to = Square(rank, move.to_sq.file + 1)
+                rook_from_idx = rank_base
+                rook_to_idx = to_idx + 1
 
-            rook_piece = self.get(rook_to)
-            self.set(rook_to, None)
-            if rook_piece is not None:
-                original_rook = _piece_obj(rook_piece.piece_type, rook_piece.colour, False)
-                self.set(rook_from, original_rook)
+            self._clear_index(rook_to_idx)
+            self._place_piece_at_index(rook_from_idx, PieceType.ROOK, undo.moved_piece.colour, False)
         else:
-            self.set(move.to_sq, None)
-            self.set(move.from_sq, undo.moved_piece)
+            self._clear_index(to_idx)
+            self._place_piece_at_index(
+                from_idx,
+                undo.moved_piece.piece_type,
+                undo.moved_piece.colour,
+                undo.moved_piece.has_moved,
+            )
             if undo.captured_piece is not None and undo.captured_sq is not None:
-                self.set(undo.captured_sq, undo.captured_piece)
+                captured_idx = self._index(undo.captured_sq)
+                self._place_piece_at_index(
+                    captured_idx,
+                    undo.captured_piece.piece_type,
+                    undo.captured_piece.colour,
+                    undo.captured_piece.has_moved,
+                )
 
         self.turn = undo.prev_turn
         self.en_passant_sq = undo.prev_en_passant_sq
@@ -297,17 +346,19 @@ class Board:
     def _apply_move_no_history(
         self,
         move: Move,
+        from_idx: int,
+        to_idx: int,
         piece: Piece,
-        captured_sq: Optional[Square],
+        captured_idx: Optional[int],
     ) -> None:
-        if captured_sq is not None:
-            self.set(captured_sq, None)
+        if captured_idx is not None:
+            self._clear_index(captured_idx)
 
         if move.flag in (MoveFlag.CASTLE_KING, MoveFlag.CASTLE_QUEEN):
-            self._apply_castle(move, piece)
+            self._apply_castle(move.flag, from_idx, to_idx, piece.colour)
             return
 
-        self.set(move.from_sq, None)
+        self._clear_index(from_idx)
 
         if move.flag == MoveFlag.PROMOTION:
             promo_name = (
@@ -316,27 +367,28 @@ class Board:
                 else "QUEEN"
             )
             promo_type = PieceType[promo_name.upper()]
-            self.set(move.to_sq, _piece_obj(promo_type, piece.colour, True))
+            self._place_piece_at_index(to_idx, promo_type, piece.colour, True)
             return
 
-        self.set(move.to_sq, piece.with_moved())
+        self._place_piece_at_index(to_idx, piece.piece_type, piece.colour, True)
 
-    def _apply_castle(self, move: Move, king: Piece) -> None:
-        self.set(move.from_sq, None)
-        self.set(move.to_sq, king.with_moved())
-
-        rank = move.from_sq.rank
-        if move.flag == MoveFlag.CASTLE_KING:
-            rook_from = Square(rank, self.files - 1)
-            rook_to   = Square(rank, move.to_sq.file - 1)
+    def _apply_castle(self, flag: MoveFlag, from_idx: int, to_idx: int, colour: Colour) -> None:
+        rank_base = (from_idx // self.files) * self.files
+        if flag == MoveFlag.CASTLE_KING:
+            rook_from_idx = rank_base + self.files - 1
+            rook_to_idx = to_idx - 1
         else:
-            rook_from = Square(rank, 0)
-            rook_to   = Square(rank, move.to_sq.file + 1)
+            rook_from_idx = rank_base
+            rook_to_idx = to_idx + 1
 
-        rook = self.get(rook_from)
-        if rook:
-            self.set(rook_to, rook.with_moved())
-            self.set(rook_from, None)
+        rook_entry = self._entry_at_index(rook_from_idx)
+        self._clear_index(from_idx)
+        self._place_piece_at_index(to_idx, PieceType.KING, colour, True)
+
+        if rook_entry is not None:
+            rook_type, rook_colour = rook_entry
+            self._clear_index(rook_from_idx)
+            self._place_piece_at_index(rook_to_idx, rook_type, rook_colour, True)
 
     # ── Serialisation ─────────────────────────────────────────────────────────
 
@@ -346,39 +398,36 @@ class Board:
         for rank in range(self.ranks - 1, -1, -1):
             empty = 0
             row = ""
+            row_start = rank * self.files
             for file in range(self.files):
-                piece = self.get(Square(rank, file))
-                if piece is None:
+                idx = row_start + file
+                entry = self._entry_at_index(idx)
+                if entry is None:
                     empty += 1
-                else:
-                    if empty:
-                        row += str(empty)
-                        empty = 0
-                    row += piece.symbol()
+                    continue
+                if empty:
+                    row += str(empty)
+                    empty = 0
+                piece_type, colour = entry
+                row += self._entry_symbol(piece_type, colour)
             if empty:
                 row += str(empty)
             rows.append(row)
 
-        return f"{'/'.join(rows)}"
-
+        return "/".join(rows)
 
     def to_fen(self) -> str:
         position = self.to_fen_position()
-
-        turn_char = 'w' if self.turn == Colour.WHITE else 'b'
-        ep = self.en_passant_sq.to_algebraic() if self.en_passant_sq else '-'
-        
-        castling = self._castling_rights()
-        if not castling:
-            castling = "-"
-
+        turn_char = "w" if self.turn == Colour.WHITE else "b"
+        ep = self.en_passant_sq.to_algebraic() if self.en_passant_sq else "-"
+        castling = self._castling_rights() or "-"
         return f"{position} {turn_char} {castling} {ep} {self.halfmove_clock} {self.fullmove_number}"
 
     @classmethod
     def from_fen(cls, fen: str) -> "Board":
         parts = fen.strip().split()
         board = cls(8, 8)
-        rows = parts[0].split('/')
+        rows = parts[0].split("/")
         if len(rows) != 8:
             raise ValueError(f"FEN has {len(rows)} rows, expected 8")
 
@@ -387,33 +436,45 @@ class Board:
             for ch in row:
                 if ch.isdigit():
                     file_idx += int(ch)
-                else:
-                    colour = Colour.WHITE if ch.isupper() else Colour.BLACK
-                    piece_type = PieceType.from_symbol(ch)
-                    board.set(Square(rank_idx, file_idx), Piece(piece_type, colour))
-                    file_idx += 1
+                    continue
+                colour = Colour.WHITE if ch.isupper() else Colour.BLACK
+                piece_type = PieceType.from_symbol(ch)
+                idx = rank_idx * board.files + file_idx
+                board._place_piece_at_index(idx, piece_type, colour, False)
+                file_idx += 1
 
         if len(parts) > 1:
-            board.turn = Colour.WHITE if parts[1] == 'w' else Colour.BLACK
+            board.turn = Colour.WHITE if parts[1] == "w" else Colour.BLACK
         if len(parts) > 2:
             castling = parts[2]
 
-            def set_has_moved(sq: Square, expected_type: PieceType, expected_colour: Colour, has_moved: bool) -> None:
-                piece = board.get(sq)
-                if piece and piece.piece_type == expected_type and piece.colour == expected_colour:
-                    board.set(sq, Piece(expected_type, expected_colour, has_moved=has_moved))
+            def set_has_moved_idx(
+                idx: int,
+                expected_type: PieceType,
+                expected_colour: Colour,
+                has_moved: bool,
+            ) -> None:
+                if board._entry_at_index(idx) == (expected_type, expected_colour):
+                    board._clear_index(idx)
+                    board._place_piece_at_index(idx, expected_type, expected_colour, has_moved)
 
-            white_has_castling = 'K' in castling or 'Q' in castling
-            black_has_castling = 'k' in castling or 'q' in castling
+            white_has_castling = "K" in castling or "Q" in castling
+            black_has_castling = "k" in castling or "q" in castling
 
-            set_has_moved(Square(0, 4), PieceType.KING, Colour.WHITE, not white_has_castling)
-            set_has_moved(Square(0, 0), PieceType.ROOK, Colour.WHITE, 'Q' not in castling)
-            set_has_moved(Square(0, board.files - 1), PieceType.ROOK, Colour.WHITE, 'K' not in castling)
+            set_has_moved_idx(4, PieceType.KING, Colour.WHITE, not white_has_castling)
+            set_has_moved_idx(0, PieceType.ROOK, Colour.WHITE, "Q" not in castling)
+            set_has_moved_idx(board.files - 1, PieceType.ROOK, Colour.WHITE, "K" not in castling)
 
-            set_has_moved(Square(board.ranks - 1, 4), PieceType.KING, Colour.BLACK, not black_has_castling)
-            set_has_moved(Square(board.ranks - 1, 0), PieceType.ROOK, Colour.BLACK, 'q' not in castling)
-            set_has_moved(Square(board.ranks - 1, board.files - 1), PieceType.ROOK, Colour.BLACK, 'k' not in castling)
-        if len(parts) > 3 and parts[3] != '-':
+            black_rank_base = (board.ranks - 1) * board.files
+            set_has_moved_idx(black_rank_base + 4, PieceType.KING, Colour.BLACK, not black_has_castling)
+            set_has_moved_idx(black_rank_base, PieceType.ROOK, Colour.BLACK, "q" not in castling)
+            set_has_moved_idx(
+                black_rank_base + board.files - 1,
+                PieceType.ROOK,
+                Colour.BLACK,
+                "k" not in castling,
+            )
+        if len(parts) > 3 and parts[3] != "-":
             board.en_passant_sq = Square.from_algebraic(parts[3])
         if len(parts) > 4:
             board.halfmove_clock = int(parts[4])
@@ -426,33 +487,42 @@ class Board:
     def standard(cls) -> "Board":
         """Return a board in the standard chess starting position."""
         board = cls(8, 8)
-        back_rank = [W_ROOK, W_KNIGHT, W_BISHOP, W_QUEEN, W_KING, W_BISHOP, W_KNIGHT, W_ROOK]
-        for f, piece in enumerate(back_rank):
-            board.set(Square(0, f), piece)
-            board.set(Square(1, f), W_PAWN)
-            board.set(Square(6, f), B_PAWN)
-            board.set(Square(7, f), Piece(piece.piece_type, Colour.BLACK))
+        back_rank = [
+            PieceType.ROOK,
+            PieceType.KNIGHT,
+            PieceType.BISHOP,
+            PieceType.QUEEN,
+            PieceType.KING,
+            PieceType.BISHOP,
+            PieceType.KNIGHT,
+            PieceType.ROOK,
+        ]
+        for file_idx, piece_type in enumerate(back_rank):
+            board._place_piece_at_index(file_idx, piece_type, Colour.WHITE, False)
+            board._place_piece_at_index(board.files + file_idx, PieceType.PAWN, Colour.WHITE, False)
+            board._place_piece_at_index((board.ranks - 2) * board.files + file_idx, PieceType.PAWN, Colour.BLACK, False)
+            board._place_piece_at_index((board.ranks - 1) * board.files + file_idx, piece_type, Colour.BLACK, False)
         return board
 
     def _castling_rights(self) -> str:
         """Return the active castling rights string (e.g. 'KQk') for the current position."""
         rights = ""
-        wk = self.get(Square(0, 4))
-        if wk and wk.piece_type == PieceType.KING and wk.colour == Colour.WHITE and not wk.has_moved:
-            wkr = self.get(Square(0, self.files - 1))
-            if wkr and wkr.piece_type == PieceType.ROOK and wkr.colour == Colour.WHITE and not wkr.has_moved:
-                rights += 'K'
-            wqr = self.get(Square(0, 0))
-            if wqr and wqr.piece_type == PieceType.ROOK and wqr.colour == Colour.WHITE and not wqr.has_moved:
-                rights += 'Q'
-        bk = self.get(Square(self.ranks - 1, 4))
-        if bk and bk.piece_type == PieceType.KING and bk.colour == Colour.BLACK and not bk.has_moved:
-            bkr = self.get(Square(self.ranks - 1, self.files - 1))
-            if bkr and bkr.piece_type == PieceType.ROOK and bkr.colour == Colour.BLACK and not bkr.has_moved:
-                rights += 'k'
-            bqr = self.get(Square(self.ranks - 1, 0))
-            if bqr and bqr.piece_type == PieceType.ROOK and bqr.colour == Colour.BLACK and not bqr.has_moved:
-                rights += 'q'
+        if self._has_unmoved_piece_at_index(4, PieceType.KING, Colour.WHITE):
+            if self._has_unmoved_piece_at_index(self.files - 1, PieceType.ROOK, Colour.WHITE):
+                rights += "K"
+            if self._has_unmoved_piece_at_index(0, PieceType.ROOK, Colour.WHITE):
+                rights += "Q"
+
+        black_rank_base = (self.ranks - 1) * self.files
+        if self._has_unmoved_piece_at_index(black_rank_base + 4, PieceType.KING, Colour.BLACK):
+            if self._has_unmoved_piece_at_index(
+                black_rank_base + self.files - 1,
+                PieceType.ROOK,
+                Colour.BLACK,
+            ):
+                rights += "k"
+            if self._has_unmoved_piece_at_index(black_rank_base, PieceType.ROOK, Colour.BLACK):
+                rights += "q"
         return rights
 
     # ── Hashing (for transposition table) ─────────────────────────────────────
@@ -476,9 +546,10 @@ class Board:
                 while piece_bb:
                     lsb = piece_bb & -piece_bb
                     idx = lsb.bit_length() - 1
-                    sq = self._square_from_index(idx)
+                    rank = idx // self.files
+                    file = idx % self.files
                     has_moved = bool(self._moved_mask & lsb)
-                    piece_key = hash((piece_type, colour, sq.rank, sq.file, has_moved))
+                    piece_key = hash((piece_type, colour, rank, file, has_moved))
                     h ^= piece_key * self._ZOBRIST_PIECE_MULTIPLIER
                     piece_bb ^= lsb
  
@@ -500,10 +571,15 @@ class Board:
         lines = []
         for rank in range(self.ranks - 1, -1, -1):
             row = f"{rank + 1} "
+            row_start = rank * self.files
             for file in range(self.files):
-                piece = self.get(Square(rank, file))
-                row += (piece.symbol() if piece else '.') + ' '
+                entry = self._entry_at_index(row_start + file)
+                if entry is None:
+                    row += ". "
+                    continue
+                piece_type, colour = entry
+                row += self._entry_symbol(piece_type, colour) + " "
             lines.append(row)
-        lines.append("  " + " ".join(chr(ord('a') + f) for f in range(self.files)))
+        lines.append("  " + " ".join(chr(ord("a") + file) for file in range(self.files)))
         lines.append(f"Turn: {self.turn.value}  Move: {self.fullmove_number}")
         return "\n".join(lines)
