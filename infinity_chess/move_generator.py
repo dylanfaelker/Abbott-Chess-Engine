@@ -61,9 +61,9 @@ class MoveGenerator:
 
     # ── Game state queries ────────────────────────────────────────────────────
 
-    def game_over(self) -> tuple[bool, Optional[str]]:
+    def game_over(self, legal_moves: Optional[list[Move]] = None) -> tuple[bool, Optional[str]]:
         """Return (is_over, result). Result is 'white', 'black', 'draw', or None."""
-        return self.rules.game_over(self.board)
+        return self.rules.game_over(self.board, legal_moves)
 
     def is_in_check(self, colour: Optional[Colour] = None) -> bool:
         colour = colour or self.board.turn

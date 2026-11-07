@@ -85,7 +85,8 @@ class Search:
             if flag == "upper" and tt_score <= alpha: return tt_score
 
         gen = MoveGenerator(board, self.rules)
-        over, result = gen.game_over()
+        legal_moves = gen.legal_moves()
+        over, result = gen.game_over(legal_moves)
         if over:
             if result in ("white", "black"):
                 loser = Colour.WHITE if result == "black" else Colour.BLACK
@@ -93,13 +94,13 @@ class Search:
             return 0 # draw
 
         if depth == 0:
-            return self._quiescence(board, alpha, beta)
+            return self._quiescence(board, alpha, beta, legal_moves)
 
         original_alpha = alpha
         best_score = -INF
         best_move = None
 
-        for move in self._ordered_moves(board, ply):
+        for move in self._ordered_moves(board, ply, legal_moves):
             undo = board.make_move(move)
             score = -self._negamax(board, depth - 1, -beta, -alpha, ply + 1)
             board.unmake_move(undo)
@@ -123,7 +124,13 @@ class Search:
 
         return best_score
 
-    def _quiescence(self, board: Board, alpha: float, beta: float) -> int:
+    def _quiescence(
+        self,
+        board: Board,
+        alpha: float,
+        beta: float,
+        legal_moves: list[Move] | None = None,
+    ) -> int:
         """Extend leaf search through captures and checks. Combats horizon effect."""
         score = self.evaluator.evaluate(board) # stand-pat
         if board.turn == Colour.BLACK:
@@ -132,7 +139,7 @@ class Search:
         if score >= beta:  return beta
         alpha = max(alpha, score)
 
-        for move in self._ordered_moves(board, 0):
+        for move in self._ordered_moves(board, 0, legal_moves):
 
             if move.flag in (MoveFlag.CAPTURE, MoveFlag.EN_PASSANT):
                 undo = board.make_move(move)
@@ -143,10 +150,11 @@ class Search:
 
         return alpha
 
-    def _ordered_moves(self, board: Board, ply: int):
+    def _ordered_moves(self, board: Board, ply: int, legal_moves: list[Move] | None = None):
         """Return legal moves sorted by simple tactical and killer-move heuristics."""
-        gen = MoveGenerator(board, self.rules)
-        moves = gen.legal_moves()
+        if legal_moves is None:
+            gen = MoveGenerator(board, self.rules)
+            legal_moves = gen.legal_moves()
         scored = []
 
         # Find the best move identified in the previous max depth
@@ -156,7 +164,7 @@ class Search:
         if tt_entry and "move" in tt_entry:
             tt_move = tt_entry["move"]
 
-        for move in moves:
+        for move in legal_moves:
             score = 0
 
             # Best first Hueristic - found via iterative deepening

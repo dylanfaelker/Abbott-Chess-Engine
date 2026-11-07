@@ -63,7 +63,11 @@ class RuleSet(ABC):
         ...
 
     @abstractmethod
-    def game_over(self, board: Board) -> tuple[bool, Optional[str]]:
+    def game_over(
+        self,
+        board: Board,
+        legal_moves: Optional[list[Move]] = None,
+    ) -> tuple[bool, Optional[str]]:
         """
         Return (is_over, result_string).
         result_string examples: 'white', 'black', 'draw', or None if not over.
@@ -151,12 +155,17 @@ class StandardRules(RuleSet):
             return True
         return False
 
-    def game_over(self, board: Board) -> tuple[bool, Optional[str]]:
+    def game_over(
+        self,
+        board: Board,
+        legal_moves: Optional[list[Move]] = None,
+    ) -> tuple[bool, Optional[str]]:
+        """Check terminal state, reusing legal moves when the caller has them."""
         colour = board.turn
-        if self.is_checkmate(board, colour):
-            winner = colour.opponent().value
-            return True, winner
-        if self.is_stalemate(board, colour):
+        moves = legal_moves if legal_moves is not None else list(self.legal_moves(board, colour))
+        if not moves:
+            if self.is_in_check(board, colour):
+                return True, colour.opponent().value
             return True, "draw"
         if self.is_draw(board):
             return True, "draw"
