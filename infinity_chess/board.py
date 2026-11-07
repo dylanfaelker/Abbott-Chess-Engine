@@ -7,11 +7,48 @@ Backed by bitboards plus move undo support.
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from typing import Optional, Iterator
 
 from infinity_chess.move import Move, MoveFlag, SpecialMove, Square
 from infinity_chess.pieces import Colour, Piece, PieceType
+
+
+_ZOBRIST_SEED = 0xDFAE
+
+
+@dataclass(frozen=True)
+class _ZobristKeys:
+    ZPIECE: dict[tuple[Colour, PieceType], tuple[int, ...]]
+    ZTURN: int
+    ZEP: tuple[int, ...]
+    ZCASTLE: dict[str, int]
+
+
+_ZOBRIST_KEYS: dict[tuple[int, int], _ZobristKeys] = {}
+
+
+def _zobrist_keys(ranks: int, files: int) -> _ZobristKeys:
+    """Return deterministic Zobrist tables sized for this board shape."""
+    dimensions = (ranks, files)
+    keys = _ZOBRIST_KEYS.get(dimensions)
+    if keys is None:
+        rng = random.Random(_ZOBRIST_SEED)
+        size = ranks * files
+        piece_keys = {
+            (colour, piece_type): tuple(rng.getrandbits(64) for _ in range(size))
+            for colour in Colour
+            for piece_type in PieceType
+        }
+        keys = _ZobristKeys(
+            ZPIECE=piece_keys,
+            ZTURN=rng.getrandbits(64),
+            ZEP=tuple(rng.getrandbits(64) for _ in range(size)),
+            ZCASTLE={right: rng.getrandbits(64) for right in "KQkq"},
+        )
+        _ZOBRIST_KEYS[dimensions] = keys
+    return keys
 
 
 _PIECE_CACHE: dict[tuple[PieceType, Colour, bool], Piece] = {}
@@ -37,6 +74,7 @@ class UndoState:
     prev_fullmove_number: int
     prev_turn: Colour
     prev_moved_mask: int
+    prev_hash: int
 
 
 class Board:
@@ -51,6 +89,8 @@ class Board:
     def __init__(self, ranks: int = 8, files: int = 8):
         self.ranks = ranks
         self.files = files
+        self._zobrist = _zobrist_keys(ranks, files)
+        self.hash = 0
         self._board_mask: int = (1 << (ranks * files)) - 1 # Bitboard full of 1s
         self.turn: Colour = Colour.WHITE
         self.en_passant_sq: Optional[Square] = None
@@ -70,6 +110,8 @@ class Board:
         new = Board.__new__(Board)
         new.ranks = self.ranks
         new.files = self.files
+        new._zobrist = self._zobrist
+        new.hash = self.hash
         new._board_mask = self._board_mask
         new.turn = self.turn
         new.en_passant_sq = self.en_passant_sq
@@ -120,6 +162,7 @@ class Board:
             return
         piece_type, colour = entry
         mask = 1 << idx
+        self.hash ^= self._zobrist.ZPIECE[(colour, piece_type)][idx]
         self.bitboards[(colour, piece_type)] &= ~mask
         self._moved_mask &= ~mask
         self._square_cache[idx] = None
@@ -132,6 +175,7 @@ class Board:
         has_moved: bool,
     ) -> None:
         mask = 1 << idx
+        self.hash ^= self._zobrist.ZPIECE[(colour, piece_type)][idx]
         self.bitboards[(colour, piece_type)] |= mask
         if has_moved:
             self._moved_mask |= mask
@@ -154,7 +198,11 @@ class Board:
         return self._piece_at_index(self._index(sq))
 
     def set(self, sq: Square, piece: Optional[Piece]) -> None:
+        old_castling = set(self._castling_rights())
         self._replace_index(self._index(sq), piece)
+        new_castling = set(self._castling_rights())
+        for right in old_castling ^ new_castling:
+            self.hash ^= self._zobrist.ZCASTLE[right]
 
     def colour_bitboard(self, colour: Colour) -> int:
         """Return all occupied squares for one side."""
@@ -233,11 +281,17 @@ class Board:
         return new_board
 
     def make_move(self, move: Move) -> UndoState:
+        prev_hash = self.hash
         from_idx = self._index(move.from_sq)
         to_idx = self._index(move.to_sq)
         piece = self._piece_at_index(from_idx)
         if piece is None:
             raise ValueError(f"No piece on {move.from_sq}")
+
+        for right in self._castling_rights():
+            self.hash ^= self._zobrist.ZCASTLE[right]
+        if self.en_passant_sq is not None:
+            self.hash ^= self._zobrist.ZEP[self._index(self.en_passant_sq)]
 
         captured_idx: Optional[int] = None
         captured_piece: Optional[Piece] = None
@@ -264,6 +318,7 @@ class Board:
             prev_fullmove_number=self.fullmove_number,
             prev_turn=self.turn,
             prev_moved_mask=self._moved_mask,
+            prev_hash=prev_hash,
         )
 
         self.en_passant_sq = None
@@ -285,6 +340,11 @@ class Board:
             self.fullmove_number += 1
 
         self.turn = self.turn.opponent()
+        self.hash ^= self._zobrist.ZTURN
+        if self.en_passant_sq is not None:
+            self.hash ^= self._zobrist.ZEP[self._index(self.en_passant_sq)]
+        for right in self._castling_rights():
+            self.hash ^= self._zobrist.ZCASTLE[right]
         self.zobrist_history.append(self.zobrist_hash())
         return undo
 
@@ -337,6 +397,7 @@ class Board:
         self.halfmove_clock = undo.prev_halfmove_clock
         self.fullmove_number = undo.prev_fullmove_number
         self._moved_mask = undo.prev_moved_mask
+        self.hash = undo.prev_hash
 
     def _apply_move_no_history(
         self,
@@ -508,6 +569,7 @@ class Board:
         if len(parts) > 5:
             board.fullmove_number = int(parts[5])
 
+        board.hash = board.recompute_hash()
         return board
 
     @classmethod
@@ -529,6 +591,7 @@ class Board:
             board._place_piece_at_index(board.files + file_idx, PieceType.PAWN, Colour.WHITE, False)
             board._place_piece_at_index((board.ranks - 2) * board.files + file_idx, PieceType.PAWN, Colour.BLACK, False)
             board._place_piece_at_index((board.ranks - 1) * board.files + file_idx, piece_type, Colour.BLACK, False)
+        board.hash = board.recompute_hash()
         return board
 
     def _castling_rights(self) -> str:
@@ -559,45 +622,35 @@ class Board:
 
     # ── Hashing (for transposition table) ─────────────────────────────────────
 
-    _ZOBRIST_PIECE_MULTIPLIER = 0x2320966b7560cd4c
-    _ZOBRIST_TURN_KEY         = 0x685e6f47d3d50ebd
-    _ZOBRIST_EP_MULTIPLIER    = 0x329f754e8d3eeb7d
-    _ZOBRIST_CASTLING_KEYS = {
-        'K': 0xa74de7cd7f596f2d,
-        'Q': 0x2f1b3144324b8b3f,
-        'k': 0x9ef981efebe4f71a,
-        'q': 0x5b9bc9438dbbeb34,
-    }
-
-    def zobrist_hash(self) -> int:
+    def recompute_hash(self) -> int:
+        """Recompute the Zobrist hash from the current position."""
         h = 0
- 
+
         for colour in Colour:
             for piece_type in PieceType:
                 piece_bb = self.bitboards[(colour, piece_type)]
                 while piece_bb:
                     lsb = piece_bb & -piece_bb
                     idx = lsb.bit_length() - 1
-                    rank = idx // self.files
-                    file = idx % self.files
-                    has_moved = bool(self._moved_mask & lsb)
-                    piece_key = hash((piece_type, colour, rank, file, has_moved))
-                    h ^= piece_key * self._ZOBRIST_PIECE_MULTIPLIER
+                    h ^= self._zobrist.ZPIECE[(colour, piece_type)][idx]
                     piece_bb ^= lsb
- 
+
         # Side to move
         if self.turn == Colour.BLACK:
-            h ^= self._ZOBRIST_TURN_KEY
- 
-        # En passant file
-        if self.en_passant_sq:
-            h ^= hash((self.en_passant_sq.rank, self.en_passant_sq.file)) * self._ZOBRIST_EP_MULTIPLIER
- 
+            h ^= self._zobrist.ZTURN
+
+        # En passant square
+        if self.en_passant_sq is not None:
+            h ^= self._zobrist.ZEP[self._index(self.en_passant_sq)]
+
         # Castling rights
         for right in self._castling_rights():
-            h ^= self._ZOBRIST_CASTLING_KEYS[right]
- 
-        return h & 0xFFFFFFFFFFFFFFFF
+            h ^= self._zobrist.ZCASTLE[right]
+
+        return h
+
+    def zobrist_hash(self) -> int:
+        return self.hash
 
     def __repr__(self) -> str:
         lines = []
