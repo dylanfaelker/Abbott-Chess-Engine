@@ -126,12 +126,10 @@ class Evaluator:
 
     def _material(self, board: Board) -> int:
         score = 0
-        for sq in board.all_squares():
-            piece = board.get(sq)
-            if piece is None:
-                continue
-            value = PIECE_VALUES.get(piece.piece_type, 0)
-            score += value if piece.colour == Colour.WHITE else -value
+        for colour in Colour:
+            for _, piece in board.pieces_for(colour):
+                value = PIECE_VALUES.get(piece.piece_type, 0)
+                score += value if piece.colour == Colour.WHITE else -value
         return score
 
     def _control(self, board: Board) -> int:
@@ -186,7 +184,7 @@ class Evaluator:
             for df in (-1, 0, 1):
                 if dr == 0 and df == 0:
                     continue
-                target = rules.wrap_square(sq + (dr, df))
+                target = rules.wrap_square(sq + (dr, df), board)
                 if board.in_bounds(target):
                     ring.add(target)
         return ring
@@ -217,19 +215,17 @@ class Evaluator:
         shift_white = black_king_file - 4
 
         score = 0
-        for sq in board.all_squares():
-            piece = board.get(sq)
-            if piece is None:
-                continue
-            table = PIECE_TABLES.get(piece.piece_type)
-            if table is None:
-                continue
-            if piece.colour == Colour.WHITE:
-                sq = InfinityChessRules.wrap_square(sq + (0, shift_white))
-                idx = sq.rank * 8 + sq.file
-                score += table[idx]
-            else:
-                sq = InfinityChessRules.wrap_square(sq + (0, shift_black))# mirroring for black
-                idx = (7 - sq.rank) * 8 + sq.file
-                score -= table[idx]
+        for colour in Colour:
+            for sq, piece in board.pieces_for(colour):
+                table = PIECE_TABLES.get(piece.piece_type)
+                if table is None:
+                    continue
+                if piece.colour == Colour.WHITE:
+                    sq = InfinityChessRules.wrap_square(sq + (0, shift_white), board)
+                    idx = sq.rank * 8 + sq.file
+                    score += table[idx]
+                else:
+                    sq = InfinityChessRules.wrap_square(sq + (0, shift_black), board) # mirroring for black
+                    idx = (7 - sq.rank) * 8 + sq.file
+                    score -= table[idx]
         return score

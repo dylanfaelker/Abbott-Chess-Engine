@@ -304,9 +304,12 @@ class StandardRules(RuleSet):
     # ── Draw helpers ──────────────────────────────────────────────────────────
 
     def _is_insufficient_material(self, board: Board) -> bool:
-        pieces: list[Piece] = [
-            board.get(sq) for sq in board.all_squares() if board.get(sq)
-        ]
+        pieces: list[Piece] = []
+        for colour in Colour:
+            for _, piece in board.pieces_for(colour):
+                pieces.append(piece)
+                if len(pieces) > 4:
+                    return False
         if len(pieces) == 2: # K vs K
             return True
         if len(pieces) == 3: # K+minor vs K

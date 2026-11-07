@@ -103,6 +103,7 @@ class Board:
             for colour in Colour
             for piece_type in PieceType
         }
+        self._occupied_bitboard = 0
         self._moved_mask: int = 0
         self._square_cache: list[Optional[tuple[PieceType, Colour]]] = [None] * (ranks * files)
 
@@ -119,6 +120,7 @@ class Board:
         new.fullmove_number = self.fullmove_number
         new.zobrist_history = self.zobrist_history[:]
         new.bitboards = self.bitboards.copy()
+        new._occupied_bitboard = self._occupied_bitboard
         new._moved_mask = self._moved_mask
         new._square_cache = self._square_cache[:]
         return new
@@ -164,6 +166,7 @@ class Board:
         mask = 1 << idx
         self.hash ^= self._zobrist.ZPIECE[(colour, piece_type)][idx]
         self.bitboards[(colour, piece_type)] &= ~mask
+        self._occupied_bitboard &= ~mask
         self._moved_mask &= ~mask
         self._square_cache[idx] = None
 
@@ -177,6 +180,7 @@ class Board:
         mask = 1 << idx
         self.hash ^= self._zobrist.ZPIECE[(colour, piece_type)][idx]
         self.bitboards[(colour, piece_type)] |= mask
+        self._occupied_bitboard |= mask
         if has_moved:
             self._moved_mask |= mask
         else:
@@ -221,7 +225,7 @@ class Board:
 
     def occupied_bitboard(self) -> int:
         """Return all occupied squares on the board."""
-        return self.colour_bitboard(Colour.WHITE) | self.colour_bitboard(Colour.BLACK)
+        return self._occupied_bitboard
 
     def empty_bitboard(self) -> int:
         """Return all empty squares inside the board bounds."""

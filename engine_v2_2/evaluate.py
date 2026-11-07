@@ -186,7 +186,7 @@ class Evaluator:
             for df in (-1, 0, 1):
                 if dr == 0 and df == 0:
                     continue
-                target = rules.wrap_square(sq + (dr, df))
+                target = rules.wrap_square(sq + (dr, df), board)
                 if board.in_bounds(target):
                     ring.add(target)
         return ring
@@ -225,11 +225,11 @@ class Evaluator:
             if table is None:
                 continue
             if piece.colour == Colour.WHITE:
-                sq = InfinityChessRules.wrap_square(sq + (0, shift_white))
+                sq = InfinityChessRules.wrap_square(sq + (0, shift_white), board)
                 idx = sq.rank * 8 + sq.file
                 score += table[idx]
             else:
-                sq = InfinityChessRules.wrap_square(sq + (0, shift_black))# mirroring for black
+                sq = InfinityChessRules.wrap_square(sq + (0, shift_black), board)# mirroring for black
                 idx = (7 - sq.rank) * 8 + sq.file
                 score -= table[idx]
         return score

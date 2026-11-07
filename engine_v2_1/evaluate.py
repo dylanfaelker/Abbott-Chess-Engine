@@ -101,7 +101,7 @@ class Evaluator:
             for df in (-1, 0, 1):
                 if dr == 0 and df == 0:
                     continue
-                target = rules.wrap_square(sq + (dr, df))
+                target = rules.wrap_square(sq + (dr, df), board)
                 if board.in_bounds(target):
                     ring.add(target)
         return ring
