@@ -97,12 +97,12 @@ class Evaluator:
 
         white_attacks: Counter[Square] = Counter()
         for sq, piece in board.pieces_for(Colour.WHITE):
-            for move in rules.pseudo_legal_moves(board, sq, _for_attack_check=True):
+            for move in rules.pseudo_legal_moves(board, sq):
                 white_attacks[move.to_sq] += 1
 
         black_attacks: Counter[Square] = Counter()
         for sq, piece in board.pieces_for(Colour.BLACK):
-            for move in rules.pseudo_legal_moves(board, sq, _for_attack_check=True):
+            for move in rules.pseudo_legal_moves(board, sq):
                 black_attacks[move.to_sq] += 1
 
         # White control

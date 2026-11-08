@@ -37,7 +37,7 @@ class RuleSet(ABC):
     """
 
     @abstractmethod
-    def pseudo_legal_moves(self, board: Board, sq: Square, _for_attack_check: bool = False) -> Iterator[Move]:
+    def pseudo_legal_moves(self, board: Board, sq: Square) -> Iterator[Move]:
         """
         Yield all moves a piece on `sq` could make ignoring check.
         'Pseudo-legal' means geometrically valid but not yet filtered for
@@ -46,10 +46,29 @@ class RuleSet(ABC):
         Args:
             board (Board): Board position being queried or updated.
             sq (Square): Source or target board square.
-            _for_attack_check (bool): Whether generation is for attack detection.
 
         Returns:
             Iterator[Move]: Move iterator.
+        """
+        ...
+
+    @abstractmethod
+    def attacks_from(self, board: Board, sq: Square, piece: Piece|None =None) -> Iterator[Square]:
+        """
+        Yield every square covered by the piece on a square.
+
+        Attack coverage includes empty squares and squares occupied by either
+        side. It excludes non-attacking moves such as pawn advances and castles.
+
+        Args:
+            board (Board): Board position containing the piece.
+            sq (Square): Square occupied by the attacking piece.
+
+        Returns:
+            Iterator[Square]: Covered destination squares.
+
+        Complexity:
+            O(D), where D is the longest movement ray.
         """
         ...
 
@@ -168,6 +187,15 @@ class RuleSet(ABC):
                 if not in_check:
                     yield move
 
+KNIGHT_OFFSETS = ((-2,-1),(-2,1),(-1,-2),(-1,2),(1,-2),(1,2),(2,-1),(2,1))
+KING_OFFSETS   = ((-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1))
+ROOK_DIRS      = ((1,0),(-1,0),(0,1),(0,-1))
+BISHOP_DIRS    = ((1,1),(1,-1),(-1,1),(-1,-1))
+SLIDER_DIRS = {
+    PieceType.ROOK:   ROOK_DIRS,
+    PieceType.BISHOP: BISHOP_DIRS,
+    PieceType.QUEEN:  ROOK_DIRS + BISHOP_DIRS,
+}
 
 # ── StandardRules ─────────────────────────────────────────────────────────────
 
@@ -185,7 +213,7 @@ class StandardRules(RuleSet):
 
     # ── Public RuleSet interface ───────────────────────────────────────────────
 
-    def pseudo_legal_moves(self, board: Board, sq: Square, _for_attack_check: bool = False) -> Iterator[Move]:
+    def pseudo_legal_moves(self, board: Board, sq: Square) -> Iterator[Move]:
         """
         Dispatch generation for the piece at a square.
 
@@ -204,23 +232,64 @@ class StandardRules(RuleSet):
         if piece is None:
             return
 
-        dispatch = {
-            PieceType.PAWN:   self._pawn_moves,
-            PieceType.KNIGHT: self._knight_moves,
-            PieceType.BISHOP: self._sliding_moves,
-            PieceType.ROOK:   self._sliding_moves,
-            PieceType.QUEEN:  self._sliding_moves,
-            PieceType.KING:   self._king_moves,
-        }
+        if piece.piece_type == PieceType.KING:
+            yield from self._king_moves(board, sq, piece)
+        elif piece.piece_type == PieceType.PAWN:
+            yield from self._pawn_moves(board, sq, piece)
+        else:
+            yield from self._piece_moves(board, sq, piece)
 
-        generator = dispatch.get(piece.piece_type)
-        if generator:
-            if piece.piece_type == PieceType.KING:
-                yield from self._king_moves(board, sq, piece, skip_castling=_for_attack_check)
-            elif piece.piece_type == PieceType.PAWN:
-                yield from self._pawn_moves(board, sq, piece, only_attacks=_for_attack_check)
-            else:
-                yield from generator(board, sq, piece)
+    def attacks_from(self, board: Board, sq: Square, piece: Piece|None =None) -> Iterator[Square]:
+        """
+        Yield every square covered by the piece at a square.
+
+        Args:
+            board (Board): Board position containing the piece.
+            sq (Square): Square occupied by the attacking piece.
+
+        Returns:
+            Iterator[Square]: Covered destination squares.
+
+        Complexity:
+            O(D), where D is the longest movement ray.
+        """
+        piece = piece or board.get(sq)
+        if piece is None:
+            return
+
+        seen = 0
+
+        if piece.piece_type == PieceType.PAWN:
+            direction = 1 if piece.colour == Colour.WHITE else -1
+            offsets = ((direction, -1), (direction, 1))
+        elif piece.piece_type == PieceType.KNIGHT:
+            offsets = KNIGHT_OFFSETS
+        elif piece.piece_type == PieceType.KING:
+            offsets = KING_OFFSETS
+        else:
+            offsets = None
+
+        if offsets is not None:
+            for dr, df in offsets:
+                target = self._step(board, sq, dr, df)
+                if target is not None:
+                    target_bit = board._mask(target)
+                    if not seen & target_bit:
+                        yield target
+                        seen |= target_bit
+
+        else:
+            for dr, df in SLIDER_DIRS[piece.piece_type]:
+                target = self._step(board, sq, dr, df)
+                while target is not None and target != sq:
+                    target_bit = board._mask(target)
+                    if not seen & target_bit:
+                        yield target
+                        seen |= target_bit
+
+                    if not board.is_empty(target):
+                        break
+                    target = self._step(board, target, dr, df)
 
     def is_in_check(self, board: Board, colour: Colour) -> bool:
         """
@@ -256,9 +325,9 @@ class StandardRules(RuleSet):
         Complexity:
             O(P*D).
         """
-        for attacker_sq, _ in board.pieces_for(by_colour):
-            for move in self.pseudo_legal_moves(board, attacker_sq, _for_attack_check=True):
-                if move.to_sq == sq:
+        for attacker_sq, piece in board.pieces_for(by_colour):
+            for target in self.attacks_from(board, attacker_sq, piece):
+                if target == sq:
                     return True
         return False
 
@@ -350,7 +419,12 @@ class StandardRules(RuleSet):
 
     # ── Piece movement generators ─────────────────────────────────────────────
 
-    def _pawn_moves(self, board: Board, sq: Square, piece: Piece, only_attacks: bool = False) -> Iterator[Move]:
+    def _step(self, board, sq, delta_rank, delta_file):
+        """Square one step away, or None if it leaves the board."""
+        t = Square(sq.rank + delta_rank, sq.file + delta_file)
+        return t if board.in_bounds(t) else None
+
+    def _pawn_moves(self, board: Board, sq: Square, piece: Piece) -> Iterator[Move]:
         """
         Generate pawn moves, including promotion and en passant.
 
@@ -371,24 +445,23 @@ class StandardRules(RuleSet):
         promo_rank = board.ranks - 1 if piece.colour == Colour.WHITE else 0
 
         # Single push
-        if not only_attacks:
-            one_ahead = sq + (direction, 0)
-            if board.in_bounds(one_ahead) and board.is_empty(one_ahead):
-                if one_ahead.rank == promo_rank:
-                    yield from self._promotion_moves(sq, one_ahead)
-                else:
-                    yield Move(sq, one_ahead)
+        one_ahead = self._step(board, sq, direction, 0)
+        if one_ahead is not None and board.is_empty(one_ahead):
+            if one_ahead.rank == promo_rank:
+                yield from self._promotion_moves(sq, one_ahead)
+            else:
+                yield Move(sq, one_ahead)
 
-                # Double push from starting rank
-                if sq.rank == start_rank:
-                    two_ahead = sq + (direction * 2, 0)
-                    if board.in_bounds(two_ahead) and board.is_empty(two_ahead):
-                        yield Move(sq, two_ahead)
+            # Double push from starting rank
+            if sq.rank == start_rank:
+                two_ahead = self._step(board, sq, direction * 2, 0)
+                if two_ahead is not None and board.is_empty(two_ahead):
+                    yield Move(sq, two_ahead)
 
         # Captures (diagonal)
         for file_delta in (-1, 1):
-            capture_sq = sq + (direction, file_delta)
-            if not board.in_bounds(capture_sq):
+            capture_sq = self._step(board, sq, direction, file_delta)
+            if capture_sq is None:
                 continue
 
             target = board.get(capture_sq)
@@ -425,68 +498,16 @@ class StandardRules(RuleSet):
             yield SpecialMove(from_sq, to_sq, flag,
                               promotion_piece=piece_name)
 
-    def _knight_moves(self, board: Board, sq: Square, piece: Piece) -> Iterator[Move]:
-        """
-        Generate in-bounds knight moves.
-
-        Args:
-            board (Board): Board position being queried or updated.
-            sq (Square): Source or target board square.
-            piece (Piece): Piece involved in the operation.
-
-        Returns:
-            Iterator[Move]: Move iterator.
-
-        Complexity:
-            O(1).
-        """
-        offsets = [(-2,-1),(-2,1),(-1,-2),(-1,2),(1,-2),(1,2),(2,-1),(2,1)]
-        for dr, df in offsets:
-            target = sq + (dr, df)
-            if not board.in_bounds(target):
-                continue
-            occupant = board.get(target)
-            if occupant is None:
+    def _piece_moves(self, board, sq, piece):
+        """Knight / bishop / rook / queen / king moves, derived from attacks."""
+        for target in self.attacks_from(board, sq, piece):
+            occ = board.get(target)
+            if occ is None:
                 yield Move(sq, target)
-            elif occupant.colour != piece.colour:
-                yield Move(sq, target, MoveFlag.CAPTURE)
+            elif occ.colour != piece.colour:
+                yield Move(sq, target, MoveFlag.CAPTURE) 
 
-    def _sliding_moves(self, board: Board, sq: Square, piece: Piece) -> Iterator[Move]:
-        """
-        Yield unobstructed bishop/rook/queen rays.
-
-        Args:
-            board (Board): Board position being queried or updated.
-            sq (Square): Source or target board square.
-            piece (Piece): Piece involved in the operation.
-
-        Returns:
-            Iterator[Move]: Move iterator.
-
-        Complexity:
-            O(D) per ray.
-        """
-        directions: list[tuple[int, int]] = []
-
-        if piece.piece_type in (PieceType.ROOK, PieceType.QUEEN):
-            directions += [(1,0),(-1,0),(0,1),(0,-1)]
-        if piece.piece_type in (PieceType.BISHOP, PieceType.QUEEN):
-            directions += [(1,1),(1,-1),(-1,1),(-1,-1)]
-
-        for dr, df in directions:
-            current = sq + (dr, df)
-            while board.in_bounds(current):
-                occupant = board.get(current)
-                if occupant is None:
-                    yield Move(sq, current)
-                elif occupant.colour != piece.colour:
-                    yield Move(sq, current, MoveFlag.CAPTURE)
-                    break
-                else:
-                    break  # Blocked by own piece
-                current = current + (dr, df)
-
-    def _king_moves(self, board: Board, sq: Square, piece: Piece, skip_castling: bool = False) -> Iterator[Move]:
+    def _king_moves(self, board: Board, sq: Square, piece: Piece) -> Iterator[Move]:
         """
         Generate adjacent king moves and optional castles.
 
@@ -502,21 +523,9 @@ class StandardRules(RuleSet):
         Complexity:
             O(1) plus attack checks.
         """
-        for dr in (-1, 0, 1):
-            for df in (-1, 0, 1):
-                if dr == 0 and df == 0:
-                    continue
-                target = sq + (dr, df)
-                if not board.in_bounds(target):
-                    continue
-                occupant = board.get(target)
-                if occupant is None:
-                    yield Move(sq, target)
-                elif occupant.colour != piece.colour:
-                    yield Move(sq, target, MoveFlag.CAPTURE)
+        yield from self._piece_moves(board, sq, piece)
 
-        if not skip_castling:
-            yield from self._castle_moves(board, sq, piece)
+        yield from self._castle_moves(board, sq, piece)
 
     def _castle_moves(self, board: Board, sq: Square, piece: Piece) -> Iterator[Move]:
         """
@@ -642,156 +651,7 @@ class InfinityChessRules(StandardRules):
         """
         return Square(sq.rank, sq.file % board.files)
 
-    def _pawn_moves(self, board: Board, sq: Square, piece: Piece, only_attacks: bool = False) -> Iterator[Move]:
-        """
-        Generate pawn moves with horizontal wrap on captures.
-
-        Args:
-            board (Board): Board position being queried or updated.
-            sq (Square): Source or target board square.
-            piece (Piece): Piece involved in the operation.
-            only_attacks (bool): Whether to generate attack squares only.
-
-        Returns:
-            Iterator[Move]: Move iterator.
-
-        Complexity:
-            O(1).
-        """
-        direction = 1 if piece.colour == Colour.WHITE else -1
-        start_rank = 1 if piece.colour == Colour.WHITE else board.ranks - 2
-        promo_rank = board.ranks - 1 if piece.colour == Colour.WHITE else 0
-
-        # Single push
-        if not only_attacks:
-            one_ahead = sq + (direction, 0)
-            if board.in_bounds(one_ahead) and board.is_empty(one_ahead):
-                if one_ahead.rank == promo_rank:
-                    yield from self._promotion_moves(sq, one_ahead)
-                else:
-                    yield Move(sq, one_ahead)
-
-                # Double push from starting rank
-                if sq.rank == start_rank:
-                    two_ahead = sq + (direction * 2, 0)
-                    if board.in_bounds(two_ahead) and board.is_empty(two_ahead):
-                        yield Move(sq, two_ahead)
-
-        # Captures (diagonal)
-        for file_delta in (-1, 1):
-            capture_sq = self.wrap_square(sq + (direction, file_delta), board)
-            if not board.in_bounds(capture_sq):
-                continue
-
-            target = board.get(capture_sq)
-            if target and target.colour != piece.colour:
-                if capture_sq.rank == promo_rank:
-                    yield from self._promotion_moves(sq, capture_sq, flag=MoveFlag.PROMOTION_CAPTURE)
-                else:
-                    yield Move(sq, capture_sq, MoveFlag.CAPTURE)
-
-            # En passant
-            if capture_sq == board.en_passant_sq:
-                captured_pawn_sq = Square(sq.rank, capture_sq.file)
-                yield SpecialMove(sq, capture_sq, MoveFlag.EN_PASSANT,
-                                  captured_sq=captured_pawn_sq)
-
-    def _knight_moves(self, board: Board, sq: Square, piece: Piece) -> Iterator[Move]:
-        """
-        Generate knight moves with horizontal wrap.
-
-        Args:
-            board (Board): Board position being queried or updated.
-            sq (Square): Source or target board square.
-            piece (Piece): Piece involved in the operation.
-
-        Returns:
-            Iterator[Move]: Move iterator.
-
-        Complexity:
-            O(1).
-        """
-        offsets = [(-2,-1),(-2,1),(-1,-2),(-1,2),(1,-2),(1,2),(2,-1),(2,1)]
-        for dr, df in offsets:
-            target = self.wrap_square(sq + (dr, df), board)
-            if not board.in_bounds(target):
-                continue
-            occupant = board.get(target)
-            if occupant is None:
-                yield Move(sq, target)
-            elif occupant.colour != piece.colour:
-                yield Move(sq, target, MoveFlag.CAPTURE)
-
-    def _sliding_moves(self, board: Board, sq: Square, piece: Piece) -> Iterator[Move]:
-        """
-        Yield wrapped sliding rays until blocked or cycled.
-
-        Args:
-            board (Board): Board position being queried or updated.
-            sq (Square): Source or target board square.
-            piece (Piece): Piece involved in the operation.
-
-        Returns:
-            Iterator[Move]: Move iterator.
-
-        Complexity:
-            O(D), bounded by board squares.
-        """
-        directions: list[tuple[int, int]] = []
-
-        if piece.piece_type in (PieceType.ROOK, PieceType.QUEEN):
-            directions += [(1,0),(-1,0),(0,1),(0,-1)]
-        if piece.piece_type in (PieceType.BISHOP, PieceType.QUEEN):
-            directions += [(1,1),(1,-1),(-1,1),(-1,-1)]
-
-        seen = 0
-        for dr, df in directions:
-            current = self.wrap_square(sq + (dr, df), board)
-            while board.in_bounds(current):
-                target_bit = board._mask(current)
-                is_new_target = not seen & target_bit
-                seen |= target_bit
-
-                occupant = board.get(current)
-                if occupant is None:
-                    if is_new_target:
-                        yield Move(sq, current)
-                elif occupant.colour != piece.colour:
-                    if is_new_target:
-                        yield Move(sq, current, MoveFlag.CAPTURE)
-                    break
-                else:
-                    break  # Blocked by own piece. Will also block the infinite loop when you run into yourself via wrapping
-                current = self.wrap_square(current + (dr, df), board)
-
-    def _king_moves(self, board: Board, sq: Square, piece: Piece, skip_castling: bool = False) -> Iterator[Move]:
-        """
-        Generate adjacent king moves with horizontal wrap and optional castles.
-
-        Args:
-            board (Board): Board position being queried or updated.
-            sq (Square): Source or target board square.
-            piece (Piece): Piece involved in the operation.
-            skip_castling (bool): Whether castling moves should be omitted.
-
-        Returns:
-            Iterator[Move]: Move iterator.
-
-        Complexity:
-            O(1) plus attack checks.
-        """
-        for dr in (-1, 0, 1):
-            for df in (-1, 0, 1):
-                if dr == 0 and df == 0:
-                    continue
-                target = self.wrap_square(sq + (dr, df), board)
-                if not board.in_bounds(target):
-                    continue
-                occupant = board.get(target)
-                if occupant is None:
-                    yield Move(sq, target)
-                elif occupant.colour != piece.colour:
-                    yield Move(sq, target, MoveFlag.CAPTURE)
-
-        if not skip_castling:
-            yield from self._castle_moves(board, sq, piece)
+    
+    def _step(self, board, sq, dr, df):
+        t = Square(sq.rank + dr, (sq.file + df) % board.files)
+        return t if 0 <= t.rank < board.ranks else None

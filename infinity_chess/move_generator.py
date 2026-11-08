@@ -114,6 +114,24 @@ class MoveGenerator:
         """
         return list(self.rules.pseudo_legal_moves(self.board, sq))
 
+    def attacks_from(self, sq: Square) -> list[Square]:
+        """
+        Return every square covered by the piece at a square.
+
+        Coverage includes empty and friendly-occupied squares, unlike legal
+        move generation.
+
+        Args:
+            sq (Square): Square occupied by the attacking piece.
+
+        Returns:
+            list[Square]: Covered destination squares.
+
+        Complexity:
+            O(D), where D is the longest movement ray.
+        """
+        return list(self.rules.attacks_from(self.board, sq))
+
     # ── Game state queries ────────────────────────────────────────────────────
 
     def game_over(self, legal_moves: Optional[list[Move]] = None) -> tuple[bool, Optional[str]]:
