@@ -8,13 +8,19 @@ L = legal move count, M = candidate moves, and A = king-safety check cost.
 
 from __future__ import annotations
 from infinity_chess.board import Board
-from infinity_chess.move import Move, MoveFlag, SpecialMove
+from infinity_chess.move import Move, MoveFlag, SpecialMove, CAPTURE_FLAGS, QUIESCENCE_FLAGS
 from infinity_chess.move_generator import MoveGenerator
 from engine.evaluate import Evaluator, PIECE_VALUES
 from infinity_chess.pieces import Colour
 from infinity_chess.rules import RuleSet
 
 MATE_SCORE = 100_000_000
+
+TT_EXACT, TT_LOWER, TT_UPPER = 0, 1, 2
+
+# attacker values for move ordering only: the king is capped so Kxp isn't "-89,000"
+ORDER_VALUES = {pt: min(v, 1000) for pt, v in PIECE_VALUES.items()}
+
 INF = float("inf")
 
 
@@ -146,9 +152,9 @@ class Search:
         tt_entry = self.transposition_table.get(key)
         if tt_entry and tt_entry["depth"] >= depth:
             flag, tt_score = tt_entry["flag"], tt_entry["score"]
-            if flag == "exact":              return tt_score
-            if flag == "lower" and tt_score >= beta:  return tt_score
-            if flag == "upper" and tt_score <= alpha: return tt_score
+            if flag == TT_EXACT:              return tt_score
+            if flag == TT_LOWER and tt_score >= beta:  return tt_score
+            if flag == TT_UPPER and tt_score <= alpha: return tt_score
 
         gen = MoveGenerator(board, self.rules)
         legal_moves = gen.legal_moves()
@@ -177,15 +183,15 @@ class Search:
             alpha = max(alpha, score)
 
             if alpha >= beta: # beta-cutoff -> killer move
-                if move.flag not in (MoveFlag.CAPTURE, MoveFlag.EN_PASSANT, MoveFlag.PROMOTION_CAPTURE): # killer moves are only "quiet" moves
+                if move.flag not in CAPTURE_FLAGS: # killer moves are only "quiet" moves
                     self.killer_moves[ply][1] = self.killer_moves[ply][0]
                     self.killer_moves[ply][0] = move
                 break
 
         # Updating the transpotion table
-        flag = "exact"
-        if best_score <= original_alpha: flag = "upper"
-        elif best_score >= beta:         flag = "lower"
+        flag = TT_EXACT
+        if best_score <= original_alpha: flag = TT_UPPER
+        elif best_score >= beta:         flag = TT_LOWER
         self.transposition_table[key] = {"depth": depth, "score": best_score, "flag": flag, "move": best_move}
 
         return best_score
@@ -222,7 +228,7 @@ class Search:
 
         for move in self._ordered_moves(board, 0, legal_moves):
 
-            if move.flag in (MoveFlag.CAPTURE, MoveFlag.EN_PASSANT, MoveFlag.PROMOTION_CAPTURE):
+            if move.flag in QUIESCENCE_FLAGS:
                 undo = board.make_move(move)
                 s = -self._quiescence(board, -beta, -alpha)
                 board.unmake_move(undo)

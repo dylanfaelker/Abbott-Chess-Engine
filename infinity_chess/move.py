@@ -33,6 +33,8 @@ class MoveFlag(Enum):
     CASTLE_QUEEN      = auto()
     EN_PASSANT        = auto()
 
+CAPTURE_FLAGS     = frozenset({MoveFlag.CAPTURE, MoveFlag.EN_PASSANT, MoveFlag.PROMOTION_CAPTURE})
+QUIESCENCE_FLAGS  = CAPTURE_FLAGS | {MoveFlag.PROMOTION}
 
 @dataclass(frozen=True)
 class Square:
