@@ -316,10 +316,10 @@ class Evaluator:
 
         # Positions are centered so the opposing king is in the e file
         white_king_file = board.find_piece(PieceType.KING, Colour.WHITE).file
-        shift_black = white_king_file - 4
+        shift_black = 4 - white_king_file
 
         black_king_file = board.find_piece(PieceType.KING, Colour.BLACK).file
-        shift_white = black_king_file - 4
+        shift_white = 4 - black_king_file
 
         score = 0
         for colour in Colour:
@@ -329,10 +329,10 @@ class Evaluator:
                     continue
                 if piece.colour == Colour.WHITE:
                     sq = InfinityChessRules.wrap_square(sq + (0, shift_white), board)
-                    idx = sq.rank * 8 + sq.file
+                    idx = (7 - sq.rank) * 8 + sq.file
                     score += table[idx]
                 else:
                     sq = InfinityChessRules.wrap_square(sq + (0, shift_black), board) # mirroring for black
-                    idx = (7 - sq.rank) * 8 + sq.file
+                    idx = sq.rank * 8 + sq.file
                     score -= table[idx]
         return score
