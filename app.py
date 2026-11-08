@@ -1,3 +1,5 @@
+"""Flask API for chess-engine health checks and move searches."""
+
 import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -17,7 +19,15 @@ CORS(app, origins=["https://dylanfaelker.com", "http://localhost:3000"])
 
 @app.route("/health", methods=["GET"])
 def health():
-    """Wake-up call to ping Render"""
+    """
+    Report service health.
+
+    Returns:
+        tuple[Response, int]: JSON status response and HTTP 200.
+
+    Complexity:
+        O(1).
+    """
     return jsonify({"status": "ok"}), 200
 
 
@@ -25,17 +35,25 @@ def health():
 def get_move():
     """
     Get the engine's best move for a given position.
- 
+
     Request body:
         fen    (str):  FEN string of the current position
         depth  (int):  Search depth (default: 2, max: 8). Higher = stronger but slower.
         engine (str):  Engine version (defaults to latest engine).
- 
+
     Response:
         move   (str):   Best move in UCI format e.g. "e2e4", "e7e8q"
         eval   (float): Centipawn evaluation from the perspective of the side to move
         depth  (int):   Depth actually searched
         engine (str):   Actual engine used
+
+    Returns:
+        tuple[Response, int]: JSON response with the move and evaluation, or an
+            error response with its HTTP status.
+
+    Complexity:
+        dominated by selected engine search, approximately O(b^d) without pruning,
+    where b is branching factor and d is search depth.
     """
     data = request.get_json()
  

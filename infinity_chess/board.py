@@ -3,6 +3,8 @@ infinity_chess/board.py
 
 Board state: the grid, piece positions, and game metadata.
 Backed by bitboards plus move undo support.
+Complexity notation: N = ranks*files, P = occupied pieces, and H = stored game
+history length.
 """
 
 from __future__ import annotations
@@ -14,12 +16,30 @@ from typing import Optional, Iterator
 from infinity_chess.move import Move, MoveFlag, SpecialMove, Square
 from infinity_chess.pieces import Colour, Piece, PieceType
 
+#TODO move zobrist hashing to its own file
 
 _ZOBRIST_SEED = 0xDFAE
 
 
 @dataclass(frozen=True)
 class _ZobristKeys:
+    """
+    Hash tables for one board shape.
+
+    Args:
+        ZPIECE (dict[tuple[Colour, PieceType], tuple[int, ...]]): Random key for each
+            colour/type combination and square.
+        ZTURN (int): Random key toggled when the side to move changes.
+        ZEP (tuple[int, ...]): Random key for each en-passant target square.
+        ZCASTLE (dict[str, int]): Random key for each castling right.
+
+    Returns:
+        _ZobristKeys instance: piece/turn/EP/castling keys; lookup.
+
+    Complexity:
+        O(1).
+    """
+
     ZPIECE: dict[tuple[Colour, PieceType], tuple[int, ...]]
     ZTURN: int
     ZEP: tuple[int, ...]
@@ -30,7 +50,19 @@ _ZOBRIST_KEYS: dict[tuple[int, int], _ZobristKeys] = {}
 
 
 def _zobrist_keys(ranks: int, files: int) -> _ZobristKeys:
-    """Return deterministic Zobrist tables sized for this board shape."""
+    """
+    Return deterministic tables for a board shape.
+
+    Args:
+        ranks (int): Number of ranks in the board.
+        files (int): Number of files in the board.
+
+    Returns:
+        _ZobristKeys: cached tables.
+
+    Complexity:
+        O(N) on a cache miss, O(1) on a hit.
+    """
     dimensions = (ranks, files)
     keys = _ZOBRIST_KEYS.get(dimensions)
     if keys is None:
@@ -55,6 +87,20 @@ _PIECE_CACHE: dict[tuple[PieceType, Colour, bool], Piece] = {}
 
 
 def _piece_obj(piece_type: PieceType, colour: Colour, has_moved: bool) -> Piece:
+    """
+    Return the cached immutable piece value.
+
+    Args:
+        piece_type (PieceType): Piece kind being queried.
+        colour (Colour): Piece side or side being queried.
+        has_moved (bool): Whether the piece has moved previously.
+
+    Returns:
+        Piece: Cached immutable piece value.
+
+    Complexity:
+        O(1) average.
+    """
     key = (piece_type, colour, has_moved)
     piece = _PIECE_CACHE.get(key)
     if piece is None:
@@ -65,6 +111,28 @@ def _piece_obj(piece_type: PieceType, colour: Colour, has_moved: bool) -> Piece:
 
 @dataclass(frozen=True)
 class UndoState:
+    """
+    Snapshot of move effects needed to restore a Board.
+
+    Args:
+        move (Move): Move being undone.
+        moved_piece (Piece): Piece moved by the recorded move.
+        captured_piece (Optional[Piece]): Piece captured by the move, or None.
+        captured_sq (Optional[Square]): En-passant capture square when it differs
+            from the destination.
+        prev_en_passant_sq (Optional[Square]): En-passant target before the move.
+        prev_halfmove_clock (int): Halfmove clock value before the move.
+        prev_fullmove_number (int): Fullmove number before the move.
+        prev_turn (Colour): Side to move before the move.
+        prev_moved_mask (int): Moved-piece bit mask before the move.
+        prev_hash (int): Zobrist hash before the move.
+
+    Returns:
+        UndoState instance: state snapshot used to restore the prior position.
+
+    Complexity:
+        O(1) to construct.
+    """
     move: Move
     moved_piece: Piece
     captured_piece: Optional[Piece]
@@ -79,14 +147,39 @@ class UndoState:
 
 class Board:
     """
-    The game board.
+    Mutable game position for a rectangular board.
 
     Bitboards are the source of truth for piece placement. A flat occupancy cache
     is maintained so public square lookups stay O(1) without scanning all 12
-    piece bitboards.
+    piece bitboards. Inputs are dimensions or parsed moves; outputs are position
+    queries and serialized state. Basic lookups are O(1), while full-board scans
+    are O(ranks*files).
+
+    Args:
+        ranks (int): Number of ranks in the board.
+        files (int): Number of files in the board.
+
+    Returns:
+        Board instance: position state and queries.
+
+    Complexity:
+        O(1) for cached lookups and O(N) for full-board operations.
     """
 
     def __init__(self, ranks: int = 8, files: int = 8):
+        """
+        Create an empty board.
+
+        Args:
+            ranks (int): Number of ranks in the board.
+            files (int): Number of files in the board.
+
+        Returns:
+            None: Initializes the Board instance.
+
+        Complexity:
+            O(N) for the square cache.
+        """
         self.ranks = ranks
         self.files = files
         self._zobrist = _zobrist_keys(ranks, files)
@@ -108,6 +201,15 @@ class Board:
         self._square_cache: list[Optional[tuple[PieceType, Colour]]] = [None] * (ranks * files)
 
     def copy(self) -> "Board":
+        """
+        Copy the position and histories.
+
+        Returns:
+            'Board': independent Board.
+
+        Complexity:
+            O(N + H).
+        """
         new = Board.__new__(Board)
         new.ranks = self.ranks
         new.files = self.files
@@ -126,17 +228,64 @@ class Board:
         return new
 
     def _index(self, sq: Square) -> int:
+        """
+        Flatten a square to its bit/cache index.
+
+        Args:
+            sq (Square): Source or target board square.
+
+        Returns:
+            int: integer index.
+
+        Complexity:
+            O(1).
+        """
         return sq.rank * self.files + sq.file
 
     def _mask(self, sq: Square) -> int:
+        """
+        Return a one-bit mask for a square.
+
+        Args:
+            sq (Square): Source or target board square.
+
+        Returns:
+            int: integer bitmask.
+
+        Complexity:
+            O(1).
+        """
         return 1 << self._index(sq)
 
     def _square_from_index(self, idx: int) -> Square:
+        """
+        Convert a flat index to a square.
+
+        Args:
+            idx (int): Flat board-square index.
+
+        Returns:
+            Square: Board coordinate.
+
+        Complexity:
+            O(1).
+        """
         return Square(idx // self.files, idx % self.files)
 
     @staticmethod
     def _iter_bits(bitboard: int) -> Iterator[int]:
-        """ Iterator for indexes of active bits."""
+        """
+        Yield indexes of set bits.
+
+        Args:
+            bitboard (int): Integer bit mask containing selected board squares.
+
+        Returns:
+            Iterator[int]: index iterator.
+
+        Complexity:
+            O(k), where k is set-bit count.
+        """
         while bitboard:
             lsb = bitboard & -bitboard
             yield lsb.bit_length() - 1
@@ -144,13 +293,50 @@ class Board:
 
     @staticmethod
     def _entry_symbol(piece_type: PieceType, colour: Colour) -> str:
+        """
+        Format a piece as a case-sensitive FEN symbol.
+
+        Args:
+            piece_type (PieceType): Piece kind being queried.
+            colour (Colour): Piece side or side being queried.
+
+        Returns:
+            str: one character.
+
+        Complexity:
+            O(1).
+        """
         symbol = piece_type.symbol()
         return symbol.upper() if colour == Colour.WHITE else symbol
 
     def _entry_at_index(self, idx: int) -> Optional[tuple[PieceType, Colour]]:
+        """
+        Read the cached type/colour at an index.
+
+        Args:
+            idx (int): Flat board-square index.
+
+        Returns:
+            Optional[tuple[PieceType, Colour]]: tuple or None.
+
+        Complexity:
+            O(1).
+        """
         return self._square_cache[idx]
 
     def _piece_at_index(self, idx: int) -> Optional[Piece]:
+        """
+        Build the cached Piece value at an index.
+
+        Args:
+            idx (int): Flat board-square index.
+
+        Returns:
+            Optional[Piece]: Piece or None.
+
+        Complexity:
+            O(1) average.
+        """
         entry = self._square_cache[idx]
         if entry is None:
             return None
@@ -159,6 +345,18 @@ class Board:
         return _piece_obj(piece_type, colour, has_moved)
 
     def _clear_index(self, idx: int) -> None:
+        """
+        Remove a piece and update occupancy, bitboards, and hash.
+
+        Args:
+            idx (int): Flat board-square index.
+
+        Returns:
+            None: No value is returned; the operation updates state in place.
+
+        Complexity:
+            O(1).
+        """
         entry = self._square_cache[idx]
         if entry is None:
             return
@@ -177,6 +375,21 @@ class Board:
         colour: Colour,
         has_moved: bool,
     ) -> None:
+        """
+        Place a piece and update occupancy, bitboards, and hash.
+
+        Args:
+            idx (int): Flat board-square index.
+            piece_type (PieceType): Piece kind being queried.
+            colour (Colour): Piece side or side being queried.
+            has_moved (bool): Whether the piece has moved previously.
+
+        Returns:
+            None: No value is returned; the operation updates state in place.
+
+        Complexity:
+            O(1).
+        """
         mask = 1 << idx
         self.hash ^= self._zobrist.ZPIECE[(colour, piece_type)][idx]
         self.bitboards[(colour, piece_type)] |= mask
@@ -188,20 +401,72 @@ class Board:
         self._square_cache[idx] = (piece_type, colour)
 
     def _replace_index(self, idx: int, piece: Optional[Piece]) -> None:
+        """
+        Replace an indexed square's piece.
+
+        Args:
+            idx (int): Flat board-square index.
+            piece (Optional[Piece]): Piece involved in the operation.
+
+        Returns:
+            None: No value is returned; the operation updates state in place.
+
+        Complexity:
+            O(1).
+        """
         self._clear_index(idx)
         if piece is not None:
             self._place_piece_at_index(idx, piece.piece_type, piece.colour, piece.has_moved)
 
     def _has_unmoved_piece_at_index(self, idx: int, piece_type: PieceType, colour: Colour) -> bool:
+        """
+        Check for a matching unmoved piece.
+
+        Args:
+            idx (int): Flat board-square index.
+            piece_type (PieceType): Piece kind being queried.
+            colour (Colour): Piece side or side being queried.
+
+        Returns:
+            bool: True when the condition holds; otherwise False.
+
+        Complexity:
+            O(1).
+        """
         entry = self._square_cache[idx]
         if entry != (piece_type, colour):
             return False
         return not bool(self._moved_mask & (1 << idx))
 
     def get(self, sq: Square) -> Optional[Piece]:
+        """
+        Look up a piece by square.
+
+        Args:
+            sq (Square): Source or target board square.
+
+        Returns:
+            Optional[Piece]: Piece or None.
+
+        Complexity:
+            O(1).
+        """
         return self._piece_at_index(self._index(sq))
 
     def set(self, sq: Square, piece: Optional[Piece]) -> None:
+        """
+        Set or clear a square and refresh castling hash state.
+
+        Args:
+            sq (Square): Source or target board square.
+            piece (Optional[Piece]): Piece involved in the operation.
+
+        Returns:
+            None: No value is returned; the operation updates state in place.
+
+        Complexity:
+            O(1).
+        """
         old_castling = set(self._castling_rights())
         self._replace_index(self._index(sq), piece)
         new_castling = set(self._castling_rights())
@@ -209,7 +474,18 @@ class Board:
             self.hash ^= self._zobrist.ZCASTLE[right]
 
     def colour_bitboard(self, colour: Colour) -> int:
-        """Return all occupied squares for one side."""
+        """
+        Return a side's occupied-square mask.
+
+        Args:
+            colour (Colour): Piece side or side being queried.
+
+        Returns:
+            int: bitboard.
+
+        Complexity:
+            O(1).
+        """
         return (
             self.bitboards[(colour, PieceType.PAWN)]
             | self.bitboards[(colour, PieceType.KNIGHT)]
@@ -220,23 +496,73 @@ class Board:
         )
 
     def piece_bitboard(self, colour: Colour, piece_type: PieceType) -> int:
-        """Return the bitboard for one colour/piece-type pair."""
+        """
+        Return one piece-type mask.
+
+        Args:
+            colour (Colour): Piece side or side being queried.
+            piece_type (PieceType): Piece kind being queried.
+
+        Returns:
+            int: bitboard.
+
+        Complexity:
+            O(1).
+        """
         return self.bitboards[(colour, piece_type)]
 
     def occupied_bitboard(self) -> int:
-        """Return all occupied squares on the board."""
+        """
+        Return the cached mask of occupied squares.
+
+        Returns:
+            int: bitboard.
+
+        Complexity:
+            O(1).
+        """
         return self._occupied_bitboard
 
     def empty_bitboard(self) -> int:
-        """Return all empty squares inside the board bounds."""
+        """
+        Return the mask of empty in-bounds squares.
+
+        Returns:
+            int: bitboard.
+
+        Complexity:
+            O(1).
+        """
         return self._board_mask ^ self.occupied_bitboard()
 
     def opponent_bitboard(self, colour: Colour) -> int:
-        """Return all occupied squares for the opposing side."""
+        """
+        Return the opposing side's occupied-square mask.
+
+        Args:
+            colour (Colour): Piece side or side being queried.
+
+        Returns:
+            int: bitboard.
+
+        Complexity:
+            O(1).
+        """
         return self.colour_bitboard(colour.opponent())
 
     def squares_in_bitboard(self, bitboard: int) -> Iterator[Square]:
-        """Yield squares contained in a bitboard, least-significant bit first."""
+        """
+        Yield set-bit squares from least to greatest index.
+
+        Args:
+            bitboard (int): Integer bit mask containing selected board squares.
+
+        Returns:
+            Iterator[Square]: Square iterator.
+
+        Complexity:
+            O(k).
+        """
         for idx in self._iter_bits(bitboard):
             yield self._square_from_index(idx)
 
@@ -244,6 +570,15 @@ class Board:
         """
         Return the least-significant square in a non-empty bitboard.
         First means starting from a1, going across to h1, then a2 and so on
+
+        Args:
+            bitboard (int): Integer bit mask containing selected board squares.
+
+        Returns:
+            Optional[Square]: Square or None.
+
+        Complexity:
+            O(1).
         """
         if bitboard == 0:
             return None
@@ -251,40 +586,133 @@ class Board:
         return self._square_from_index(idx)
 
     def bitboard_contains(self, bitboard: int, sq: Square) -> bool:
-        """Return True if the bitboard contains the given square."""
+        """
+        Test membership of a square in a bitboard.
+
+        Args:
+            bitboard (int): Integer bit mask containing selected board squares.
+            sq (Square): Source or target board square.
+
+        Returns:
+            bool: True when the condition holds; otherwise False.
+
+        Complexity:
+            O(1).
+        """
         return bool(bitboard & self._mask(sq))
 
     def is_empty(self, sq: Square) -> bool:
+        """
+        Test whether a square is empty.
+
+        Args:
+            sq (Square): Source or target board square.
+
+        Returns:
+            bool: True when the condition holds; otherwise False.
+
+        Complexity:
+            O(1).
+        """
         return self._entry_at_index(self._index(sq)) is None
 
     def in_bounds(self, sq: Square) -> bool:
+        """
+        Test whether a square lies inside the board.
+
+        Args:
+            sq (Square): Source or target board square.
+
+        Returns:
+            bool: True when the condition holds; otherwise False.
+
+        Complexity:
+            O(1).
+        """
         return 0 <= sq.rank < self.ranks and 0 <= sq.file < self.files
 
     # ── Iteration helpers ─────────────────────────────────────────────────────
 
     def all_squares(self) -> Iterator[Square]:
+        """
+        Yield every board square in rank/file order.
+
+        Returns:
+            Iterator[Square]: square iterator.
+
+        Complexity:
+            O(N).
+        """
         for r in range(self.ranks):
             for f in range(self.files):
                 yield Square(r, f)
 
     def pieces_for(self, colour: Colour) -> Iterator[tuple[Square, Piece]]:
+        """
+        Yield occupied squares and pieces for one colour.
+
+        Args:
+            colour (Colour): Piece side or side being queried.
+
+        Returns:
+            Iterator[tuple[Square, Piece]]: iterator of occupied entries.
+
+        Complexity:
+            O(P_colour).
+        """
         for idx in self._iter_bits(self.colour_bitboard(colour)):
             piece = self._piece_at_index(idx)
             if piece is not None:
                 yield self._square_from_index(idx), piece
 
     def find_piece(self, piece_type: PieceType, colour: Colour) -> Optional[Square]:
+        """
+        Find the least-indexed piece of a type and colour.
+
+        Args:
+            piece_type (PieceType): Piece kind being queried.
+            colour (Colour): Piece side or side being queried.
+
+        Returns:
+            Optional[Square]: Square or None.
+
+        Complexity:
+            O(1).
+        """
         return self.first_square_in_bitboard(self.piece_bitboard(colour, piece_type))
 
     # ── Move application ──────────────────────────────────────────────────────
 
     def apply_move(self, move: Move) -> "Board":
-        """Return a new Board with the move applied. Original is never mutated."""
+        """
+        Copy the board and apply a move.
+
+        Args:
+            move (Move): Move to apply or inspect.
+
+        Returns:
+            'Board': new Board.
+
+        Complexity:
+            O(N + H).
+        """
         new_board = self.copy()
         new_board.make_move(move)
         return new_board
 
     def make_move(self, move: Move) -> UndoState:
+        """
+        Apply a move in place and save undo/hash history.
+
+        Args:
+            move (Move): Move to apply or inspect.
+
+        Returns:
+            UndoState: UndoState.
+
+        Complexity:
+            O(1) average.
+        """
         prev_hash = self.hash
         from_idx = self._index(move.from_sq)
         to_idx = self._index(move.to_sq)
@@ -353,6 +781,18 @@ class Board:
         return undo
 
     def unmake_move(self, undo: UndoState) -> None:
+        """
+        Restore a position from its undo snapshot.
+
+        Args:
+            undo (UndoState): Undo snapshot returned by a previous move application.
+
+        Returns:
+            None: No value is returned; the operation updates state in place.
+
+        Complexity:
+            O(1).
+        """
         move = undo.move
         from_idx = self._index(move.from_sq)
         to_idx = self._index(move.to_sq)
@@ -411,6 +851,22 @@ class Board:
         piece: Piece,
         captured_idx: Optional[int],
     ) -> None:
+        """
+        Apply piece-placement effects without history updates.
+
+        Args:
+            move (Move): Move to apply or inspect.
+            from_idx (int): Flat index of the move origin.
+            to_idx (int): Flat index of the move destination.
+            piece (Piece): Piece involved in the operation.
+            captured_idx (Optional[int]): Flat index of the captured square.
+
+        Returns:
+            None: No value is returned; the operation updates state in place.
+
+        Complexity:
+            O(1).
+        """
         if captured_idx is not None:
             self._clear_index(captured_idx)
 
@@ -433,6 +889,21 @@ class Board:
         self._place_piece_at_index(to_idx, piece.piece_type, piece.colour, True)
 
     def _apply_castle(self, flag: MoveFlag, from_idx: int, to_idx: int, colour: Colour) -> None:
+        """
+        Move king and edge rook for castling.
+
+        Args:
+            flag (MoveFlag): Move category or operation flag.
+            from_idx (int): Flat index of the move origin.
+            to_idx (int): Flat index of the move destination.
+            colour (Colour): Piece side or side being queried.
+
+        Returns:
+            None: No value is returned; the operation updates state in place.
+
+        Complexity:
+            O(1).
+        """
         rank_base = (from_idx // self.files) * self.files
         if flag == MoveFlag.CASTLE_KING:
             rook_from_idx = rank_base + self.files - 1
@@ -453,7 +924,15 @@ class Board:
     # ── Serialisation ─────────────────────────────────────────────────────────
 
     def to_fen_position(self) -> str:
-        """A FEN notation of the position without the extra metadata."""
+        """
+        Serialize piece placement only.
+
+        Returns:
+            str: FEN placement string.
+
+        Complexity:
+            O(N).
+        """
         rows = []
         for rank in range(self.ranks - 1, -1, -1):
             empty = 0
@@ -477,6 +956,15 @@ class Board:
         return "/".join(rows)
 
     def to_fen(self) -> str:
+        """
+        Serialize position and game metadata as FEN.
+
+        Returns:
+            str: FEN string.
+
+        Complexity:
+            O(N).
+        """
         position = self.to_fen_position()
         turn_char = "w" if self.turn == Colour.WHITE else "b"
         ep = self.en_passant_sq.to_algebraic() if self.en_passant_sq else "-"
@@ -485,6 +973,18 @@ class Board:
 
     @classmethod
     def from_fen(cls, fen: str) -> "Board":
+        """
+        Parse a FEN-like position and infer its dimensions.
+
+        Args:
+            fen (str): FEN text describing the position.
+
+        Returns:
+            'Board': Parsed Board instance.
+
+        Complexity:
+            O(F + N), where F is string length.
+        """
         parts = fen.strip().split()
         if not parts:
             raise ValueError("FEN is missing piece placement")
@@ -540,6 +1040,21 @@ class Board:
                 expected_colour: Colour,
                 has_moved: bool,
             ) -> None:
+                """
+                Set moved status only when the indexed piece matches.
+
+                Args:
+                    idx (int): Flat board-square index.
+                    expected_type (PieceType): Piece type expected at the square.
+                    expected_colour (Colour): Piece colour expected at the square.
+                    has_moved (bool): Whether the piece has moved previously.
+
+                Returns:
+                    None: No value is returned; the operation updates state in place.
+
+                Complexity:
+                    O(1).
+                """
                 if board._entry_at_index(idx) == (expected_type, expected_colour):
                     board._clear_index(idx)
                     board._place_piece_at_index(idx, expected_type, expected_colour, has_moved)
@@ -578,7 +1093,15 @@ class Board:
 
     @classmethod
     def standard(cls) -> "Board":
-        """Return a board in the standard chess starting position."""
+        """
+        Build the standard 8x8 chess start.
+
+        Returns:
+            'Board': initialized Board.
+
+        Complexity:
+            O(1) for its fixed 64 squares.
+        """
         board = cls(8, 8)
         back_rank = [
             PieceType.ROOK,
@@ -599,7 +1122,15 @@ class Board:
         return board
 
     def _castling_rights(self) -> str:
-        """Return the active castling rights string (e.g. 'KQk') for the current position."""
+        """
+        Return rights supported by unmoved home pieces.
+
+        Returns:
+            str: up to four FEN letters.
+
+        Complexity:
+            O(1).
+        """
         rights = ""
         king_home_file = self.files // 2
         if self._has_unmoved_piece_at_index(king_home_file, PieceType.KING, Colour.WHITE):
@@ -627,7 +1158,15 @@ class Board:
     # ── Hashing (for transposition table) ─────────────────────────────────────
 
     def recompute_hash(self) -> int:
-        """Recompute the Zobrist hash from the current position."""
+        """
+        Rebuild the hash from pieces and metadata.
+
+        Returns:
+            int: 64-bit integer.
+
+        Complexity:
+            O(P), where P is piece count.
+        """
         h = 0
 
         for colour in Colour:
@@ -654,9 +1193,27 @@ class Board:
         return h
 
     def zobrist_hash(self) -> int:
+        """
+        Return the incrementally maintained position hash.
+
+        Returns:
+            int: 64-bit integer.
+
+        Complexity:
+            O(1).
+        """
         return self.hash
 
     def __repr__(self) -> str:
+        """
+        Render the board as a human-readable grid.
+
+        Returns:
+            str: Human-readable string.
+
+        Complexity:
+            O(N).
+        """
         lines = []
         for rank in range(self.ranks - 1, -1, -1):
             row = f"{rank + 1} "

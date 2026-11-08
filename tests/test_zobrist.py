@@ -1,3 +1,5 @@
+"""Regression tests for deterministic incremental position hashing."""
+
 import random
 import unittest
 
@@ -8,7 +10,26 @@ from infinity_chess.rules import StandardRules
 
 
 class IncrementalZobristTests(unittest.TestCase):
+    """
+    Check hash initialization and synchronization.
+
+    Returns:
+        IncrementalZobristTests: test suite for hash consistency.
+
+    Complexity:
+        O(1) to construct; each test follows the cost of the operations it exercises.
+    """
+
     def test_initial_hashes_match_recomputation(self) -> None:
+        """
+        Compare initialized hashes with a full recomputation.
+
+        Returns:
+            None: Runs assertions; raises AssertionError if a check fails.
+
+        Complexity:
+            O(P) per fixture.
+        """
         large_board = Board(10, 12)
         large_board.set(Square(9, 11), Piece(PieceType.QUEEN, Colour.WHITE))
         for board in (
@@ -19,6 +40,15 @@ class IncrementalZobristTests(unittest.TestCase):
             self.assertEqual(board.hash, board.recompute_hash())
 
     def test_castling_and_en_passant_hashes(self) -> None:
+        """
+        Check hash updates and undo for special moves.
+
+        Returns:
+            None: Runs assertions; raises AssertionError if a check fails.
+
+        Complexity:
+            O(M*A) for legal move generation.
+        """
         rules = StandardRules()
         positions = (
             (
@@ -47,6 +77,15 @@ class IncrementalZobristTests(unittest.TestCase):
             self.assertEqual(board.hash, board.recompute_hash())
 
     def test_hash_matches_recomputation_through_random_moves_and_undo(self) -> None:
+        """
+        Check hash consistency through a seeded move path and full undo.
+
+        Returns:
+            None: Runs assertions; raises AssertionError if a check fails.
+
+        Complexity:
+            O(N*M*A).
+        """
         board = Board.standard()
         rules = StandardRules()
         rng = random.Random(41)

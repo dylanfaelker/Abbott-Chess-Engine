@@ -2,6 +2,8 @@
 engine/search.py
 
 Negamax search with alpha-beta pruning, move ordering, and transposition table.
+Complexity notation: b = branching factor, d = search depth, q = quiescence depth,
+L = legal move count, M = candidate moves, and A = king-safety check cost.
 """
 
 from __future__ import annotations
@@ -17,8 +19,35 @@ INF = float("inf")
 
 
 class Search:
+    """
+    Negamax alpha-beta engine with move ordering.
+
+    Args:
+        board (Board): Board position being queried or updated.
+        rules (RuleSet | None): Ruleset used to interpret the board.
+        isVary (bool): Toggle for randomized evaluation variation.
+
+    Returns:
+        Search: Configured search engine; find_best_move returns a move and score.
+
+    Complexity:
+        O(b^d).
+    """
     def __init__(self, board: Board, rules: RuleSet | None = None, isVary: bool = True):
-        """Create a search object for a board position and ruleset."""
+        """
+        Create search state.
+
+        Args:
+            board (Board): Board position being queried or updated.
+            rules (RuleSet | None): Ruleset used to interpret the board.
+            isVary (bool): Toggle for randomized evaluation variation.
+
+        Returns:
+            None: Initializes the Search instance.
+
+        Complexity:
+            O(1).
+        """
         self.board = board
         self.generator = MoveGenerator(board, rules)
         self.evaluator = Evaluator(isVary)
@@ -28,7 +57,18 @@ class Search:
         self.isVary = isVary
 
     def find_best_move(self, depth: int) -> tuple[Move | None, int]:
-        """Run iterative deepening up to depth and return the best move and score."""
+        """
+        Search increasing depths for a best move.
+
+        Args:
+            depth (int): Maximum search depth or remaining node depth.
+
+        Returns:
+            tuple[Move | None, int]: (Move or None, score); worst-case.
+
+        Complexity:
+            O(b^d).
+        """
         self.nodes_searched = 0
         best_move = None
         best_score = -INF
@@ -55,7 +95,18 @@ class Search:
     #     return results[:top_n]
 
     def _root_search(self, depth: int) -> tuple[Move | None, int]:
-        """Search all legal root moves at a fixed depth."""
+        """
+        Score each legal root move.
+
+        Args:
+            depth (int): Maximum search depth or remaining node depth.
+
+        Returns:
+            tuple[Move | None, int]: best move and score; worst-case.
+
+        Complexity:
+            O(b^d).
+        """
         best_move = None
         best_score = -INF
         alpha, beta = -INF, INF
@@ -73,7 +124,21 @@ class Search:
         return best_move, best_score
 
     def _negamax(self, depth: int, alpha: float, beta: float, ply: int) -> int:
-        """Search a position with negamax, alpha-beta, and transposition lookups."""
+        """
+        Search one node with alpha-beta and transpositions.
+
+        Args:
+            depth (int): Maximum search depth or remaining node depth.
+            alpha (float): Current alpha bound for alpha-beta search.
+            beta (float): Current beta bound for alpha-beta search.
+            ply (int): Current distance in plies from the search root.
+
+        Returns:
+            int: score; worst-case subtree.
+
+        Complexity:
+            O(b^d).
+        """
         self.nodes_searched += 1
 
         # Checking if position was already computed via transpotion table.
@@ -126,7 +191,19 @@ class Search:
         return best_score
 
     def _quiescence(self, alpha: float, beta: float) -> int:
-        """Extend leaf search through captures and checks. Combats horizon effect."""
+        """
+        Extend a leaf through tactical captures.
+
+        Args:
+            alpha (float): Current alpha bound for alpha-beta search.
+            beta (float): Current beta bound for alpha-beta search.
+
+        Returns:
+            int: score; worst-case.
+
+        Complexity:
+            O(b^q), where q is extension depth.
+        """
         score = self.evaluator.evaluate(self.board) # stand-pat
         if self.board.turn == Colour.BLACK:
             score = -score
@@ -146,7 +223,19 @@ class Search:
         return alpha
 
     def _ordered_moves(self, board: Board, ply: int):
-        """Return legal moves sorted by simple tactical and killer-move heuristics."""
+        """
+        Sort legal moves by TT, capture, and killer priorities.
+
+        Args:
+            board (Board): Board position being queried or updated.
+            ply (int): Current distance in plies from the search root.
+
+        Returns:
+            list[Move]: Ordered legal moves.
+
+        Complexity:
+            O(L log L + M*A).
+        """
         gen = MoveGenerator(board, self.generator.rules)
         moves = gen.legal_moves()
         scored = []
