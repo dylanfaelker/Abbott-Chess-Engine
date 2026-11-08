@@ -16,7 +16,7 @@ from infinity_chess.board import Board
 from infinity_chess.move import Move, Square
 from infinity_chess.move_generator import MoveGenerator
 from infinity_chess.pieces import Colour
-from infinity_chess.rules import RuleSet, StandardRules
+from infinity_chess.rules import RuleSet, InfinityChessRules
 
 
 class Game:
@@ -54,7 +54,7 @@ class Game:
             O(1).
         """
         self.board: Board = board or Board.standard()
-        self.rules: RuleSet = rules or StandardRules()
+        self.rules: RuleSet = rules or InfinityChessRules()
         self.generator: MoveGenerator = MoveGenerator(self.board, self.rules)
         self.history: list[Move] = []
         self.result: Optional[str] = None

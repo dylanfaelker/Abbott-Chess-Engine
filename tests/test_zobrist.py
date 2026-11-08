@@ -6,7 +6,7 @@ import unittest
 from infinity_chess.board import Board
 from infinity_chess.move import Move, MoveFlag, Square
 from infinity_chess.pieces import Colour, Piece, PieceType
-from infinity_chess.rules import StandardRules
+from infinity_chess.rules import InfinityChessRules
 
 
 class IncrementalZobristTests(unittest.TestCase):
@@ -49,7 +49,7 @@ class IncrementalZobristTests(unittest.TestCase):
         Complexity:
             O(M*A) for legal move generation.
         """
-        rules = StandardRules()
+        rules = InfinityChessRules()
         positions = (
             (
                 "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1",
@@ -87,7 +87,7 @@ class IncrementalZobristTests(unittest.TestCase):
             O(N*M*A).
         """
         board = Board.standard()
-        rules = StandardRules()
+        rules = InfinityChessRules()
         rng = random.Random(41)
         undos = []
 
