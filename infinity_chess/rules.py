@@ -513,8 +513,10 @@ class StandardRules(RuleSet):
             # En passant
             if capture_sq == board.en_passant_sq:
                 captured_pawn_sq = Square(sq.rank, capture_sq.file)
-                yield SpecialMove(sq, capture_sq, MoveFlag.EN_PASSANT,
-                                  captured_sq=captured_pawn_sq)
+                target = board.get(captured_pawn_sq)
+                if target and target.colour != piece.colour and target.piece_type == PieceType.PAWN:
+                    yield SpecialMove(sq, capture_sq, MoveFlag.EN_PASSANT,
+                                    captured_sq=captured_pawn_sq)
 
     def _promotion_moves(
         self, from_sq: Square, to_sq: Square, flag: MoveFlag = MoveFlag.PROMOTION
@@ -592,7 +594,7 @@ class StandardRules(RuleSet):
         # Kingside
         rook_sq = Square(rank, board.files - 1)
         rook = board.get(rook_sq)
-        if rook and rook.piece_type == PieceType.ROOK and not rook.has_moved:
+        if rook and rook.piece_type == PieceType.ROOK and not rook.has_moved and rook.colour == piece.colour:
             path = [Square(rank, sq.file + 1), Square(rank, sq.file + 2)]
             if all(board.is_empty(s) for s in path):
                 if not any(self.is_square_attacked(board, s, opponent) for s in path):
@@ -601,7 +603,7 @@ class StandardRules(RuleSet):
         # Queenside
         rook_sq = Square(rank, 0)
         rook = board.get(rook_sq)
-        if rook and rook.piece_type == PieceType.ROOK and not rook.has_moved:
+        if rook and rook.piece_type == PieceType.ROOK and not rook.has_moved and rook.colour == piece.colour:
             path = [Square(rank, sq.file - 1), Square(rank, sq.file - 2)]
             between = [Square(rank, sq.file - 1), Square(rank, sq.file - 2), Square(rank, sq.file - 3)]
             if all(board.is_empty(s) for s in between):

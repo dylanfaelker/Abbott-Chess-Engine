@@ -177,7 +177,7 @@ class Evaluator:
                 score += value if piece.colour == Colour.WHITE else -value
         return score
 
-    def _control(self, board: Board) -> int:
+    def  _control(self, board: Board) -> int:
         """
         Score attacked squares and king pressure.
 
@@ -294,9 +294,9 @@ class Evaluator:
             O(1).
         """
 
-        INITIATIVE_VAL = 20
+        INITIATIVE_VAL = 10
 
-        return INITIATIVE_VAL / 2 if board.turn == Colour.WHITE else -1 * INITIATIVE_VAL / 2
+        return INITIATIVE_VAL if board.turn == Colour.WHITE else -1 * INITIATIVE_VAL
     
     def _piece_square(self, board: Board) -> int:
         """
