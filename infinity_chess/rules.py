@@ -394,7 +394,7 @@ class StandardRules(RuleSet):
             target = board.get(capture_sq)
             if target and target.colour != piece.colour:
                 if capture_sq.rank == promo_rank:
-                    yield from self._promotion_moves(sq, capture_sq, flag=MoveFlag.CAPTURE)
+                    yield from self._promotion_moves(sq, capture_sq, flag=MoveFlag.PROMOTION_CAPTURE)
                 else:
                     yield Move(sq, capture_sq, MoveFlag.CAPTURE)
 
@@ -422,7 +422,7 @@ class StandardRules(RuleSet):
             O(1).
         """
         for piece_name in ("QUEEN", "ROOK", "BISHOP", "KNIGHT"):
-            yield SpecialMove(from_sq, to_sq, MoveFlag.PROMOTION,
+            yield SpecialMove(from_sq, to_sq, flag,
                               promotion_piece=piece_name)
 
     def _knight_moves(self, board: Board, sq: Square, piece: Piece) -> Iterator[Move]:
@@ -686,7 +686,7 @@ class InfinityChessRules(StandardRules):
             target = board.get(capture_sq)
             if target and target.colour != piece.colour:
                 if capture_sq.rank == promo_rank:
-                    yield from self._promotion_moves(sq, capture_sq, flag=MoveFlag.CAPTURE)
+                    yield from self._promotion_moves(sq, capture_sq, flag=MoveFlag.PROMOTION_CAPTURE)
                 else:
                     yield Move(sq, capture_sq, MoveFlag.CAPTURE)
 

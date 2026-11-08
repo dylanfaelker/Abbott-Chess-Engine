@@ -876,7 +876,7 @@ class Board:
 
         self._clear_index(from_idx)
 
-        if move.flag == MoveFlag.PROMOTION:
+        if move.flag in (MoveFlag.PROMOTION, MoveFlag.PROMOTION_CAPTURE):
             promo_name = (
                 move.promotion_piece
                 if isinstance(move, SpecialMove) and move.promotion_piece

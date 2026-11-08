@@ -266,7 +266,7 @@ class Search:
             elif move in self.killer_moves[ply]:
                 score = 9_000
 
-            elif move.flag == MoveFlag.PROMOTION:
+            elif move.flag in (MoveFlag.PROMOTION, MoveFlag.PROMOTION_CAPTURE):
                 score = 8_000
 
             scored.append((score, move))

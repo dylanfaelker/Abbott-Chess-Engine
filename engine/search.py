@@ -177,7 +177,7 @@ class Search:
             alpha = max(alpha, score)
 
             if alpha >= beta: # beta-cutoff -> killer move
-                if move.flag != MoveFlag.CAPTURE and move.flag != MoveFlag.EN_PASSANT: # killer moves are only "quite" moves
+                if move.flag not in (MoveFlag.CAPTURE, MoveFlag.EN_PASSANT, MoveFlag.PROMOTION_CAPTURE): # killer moves are only "quiet" moves
                     self.killer_moves[ply][1] = self.killer_moves[ply][0]
                     self.killer_moves[ply][0] = move
                 break
@@ -222,7 +222,7 @@ class Search:
 
         for move in self._ordered_moves(board, 0, legal_moves):
 
-            if move.flag in (MoveFlag.CAPTURE, MoveFlag.EN_PASSANT):
+            if move.flag in (MoveFlag.CAPTURE, MoveFlag.EN_PASSANT, MoveFlag.PROMOTION_CAPTURE):
                 undo = board.make_move(move)
                 s = -self._quiescence(board, -beta, -alpha)
                 board.unmake_move(undo)
@@ -267,7 +267,7 @@ class Search:
                 score = 100_000
 
             # MVV-LVA Hueristic
-            elif move.flag in (MoveFlag.CAPTURE, MoveFlag.EN_PASSANT):
+            elif move.flag in (MoveFlag.CAPTURE, MoveFlag.EN_PASSANT, MoveFlag.PROMOTION_CAPTURE):
                 victim_sq = move.to_sq
                 if isinstance(move, SpecialMove):
                     victim_sq = move.captured_sq or move.to_sq
@@ -281,7 +281,7 @@ class Search:
             elif move in self.killer_moves[ply]:
                 score = 9_000
 
-            elif move.flag == MoveFlag.PROMOTION:
+            elif move.flag in (MoveFlag.PROMOTION, MoveFlag.PROMOTION_CAPTURE):
                 score = 8_000
 
             scored.append((score, move))

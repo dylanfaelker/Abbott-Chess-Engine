@@ -25,12 +25,13 @@ class MoveFlag(Enum):
     Complexity:
         O(1).
     """
-    NORMAL        = auto()
-    CAPTURE       = auto()
-    PROMOTION     = auto()
-    CASTLE_KING   = auto()
-    CASTLE_QUEEN  = auto()
-    EN_PASSANT    = auto()
+    NORMAL            = auto()
+    CAPTURE           = auto()
+    PROMOTION         = auto()
+    PROMOTION_CAPTURE = auto()
+    CASTLE_KING       = auto()
+    CASTLE_QUEEN      = auto()
+    EN_PASSANT        = auto()
 
 
 @dataclass(frozen=True)
