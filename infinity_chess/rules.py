@@ -187,6 +187,9 @@ class RuleSet(ABC):
                 if not in_check:
                     yield move
 
+_ROOKLIKE   = (PieceType.ROOK, PieceType.QUEEN)
+_BISHOPLIKE = (PieceType.BISHOP, PieceType.QUEEN)
+
 KNIGHT_OFFSETS = ((-2,-1),(-2,1),(-1,-2),(-1,2),(1,-2),(1,2),(2,-1),(2,1))
 KING_OFFSETS   = ((-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1))
 ROOK_DIRS      = ((1,0),(-1,0),(0,1),(0,-1))
@@ -323,12 +326,48 @@ class StandardRules(RuleSet):
             bool: True when the condition holds; otherwise False.
 
         Complexity:
-            O(P*D).
+            O(D): 2 pawn squares, 8 knight squares, 8 king squares and up to
+            8 rays of length at most D, independent of piece count.
         """
-        for attacker_sq, piece in board.pieces_for(by_colour):
-            for target in self.attacks_from(board, attacker_sq, piece):
-                if target == sq:
+
+        # Pawns: an attacking pawn moves in direction d, so it sits at sq - (d, ±1).
+        d = 1 if by_colour is Colour.WHITE else -1
+        for df in (-1, 1):
+            t = self._step(board, sq, -d, df)
+            if t is not None:
+                p = board.get(t)
+                if p is not None and p.colour is by_colour and p.piece_type is PieceType.PAWN:
                     return True
+
+        # Knights
+        for dr, df in KNIGHT_OFFSETS:
+            t = self._step(board, sq, dr, df)
+            if t is not None:
+                p = board.get(t)
+                if p is not None and p.colour is by_colour and p.piece_type is PieceType.KNIGHT:
+                    return True
+
+        # Kings
+        for dr, df in KING_OFFSETS:
+            t = self._step(board, sq, dr, df)
+            if t is not None:
+                p = board.get(t)
+                if p is not None and p.colour is by_colour and p.piece_type is PieceType.KING:
+                    return True
+
+        # Sliders: walk each ray until the first piece; it attacks only if it
+        # is the right colour and moves along that kind of ray.
+        for dirs, types in ((ROOK_DIRS, _ROOKLIKE), (BISHOP_DIRS, _BISHOPLIKE)):
+            for dr, df in dirs:
+                t = self._step(board, sq, dr, df)
+                while t is not None and t != sq:        # t == sq: wrapped fully round
+                    p = board.get(t)
+                    if p is not None:
+                        if p.colour is by_colour and p.piece_type in types:
+                            return True
+                        break                           # blocked either way
+                    t = self._step(board, t, dr, df)
+
         return False
 
     def is_checkmate(self, board: Board, colour: Colour) -> bool:
