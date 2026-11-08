@@ -1089,6 +1089,7 @@ class Board:
             board.fullmove_number = int(parts[5])
 
         board.hash = board.recompute_hash()
+        board.zobrist_history.append(board.zobrist_hash())
         return board
 
     @classmethod
@@ -1119,6 +1120,7 @@ class Board:
             board._place_piece_at_index((board.ranks - 2) * board.files + file_idx, PieceType.PAWN, Colour.BLACK, False)
             board._place_piece_at_index((board.ranks - 1) * board.files + file_idx, piece_type, Colour.BLACK, False)
         board.hash = board.recompute_hash()
+        board.zobrist_history.append(board.zobrist_hash())
         return board
 
     def _castling_rights(self) -> str:
