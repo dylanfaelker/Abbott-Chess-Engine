@@ -273,7 +273,7 @@ class Search:
                 score = 100_000
 
             # MVV-LVA Hueristic
-            elif move.flag in (MoveFlag.CAPTURE, MoveFlag.EN_PASSANT, MoveFlag.PROMOTION_CAPTURE):
+            elif move.flag in CAPTURE_FLAGS:
                 victim_sq = move.to_sq
                 if isinstance(move, SpecialMove):
                     victim_sq = move.captured_sq or move.to_sq

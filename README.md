@@ -38,6 +38,20 @@ The server will listen on `http://localhost:5000`.
 
 On Windows, `requirements.txt` skips `gunicorn` automatically because Gunicorn is only used on Render's Linux runtime.
 
+### Tests
+
+After installing the requirements, run the complete test suite from the
+repository root with:
+
+```powershell
+python -m unittest discover -s tests -t . -v
+```
+
+Run one feature suite with `python -m unittest tests.test_rules -v` (replace
+`test_rules` with the desired module). The engine tests are split into a shared
+suite that exercises every released engine version and a current-engine suite
+for the latest search features. See `tests/README.md` for the complete map.
+
 ### Deploy on Render
 
 1. Push this repository to GitHub
