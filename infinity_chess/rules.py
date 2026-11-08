@@ -744,14 +744,21 @@ class InfinityChessRules(StandardRules):
         if piece.piece_type in (PieceType.BISHOP, PieceType.QUEEN):
             directions += [(1,1),(1,-1),(-1,1),(-1,-1)]
 
+        seen = 0
         for dr, df in directions:
             current = self.wrap_square(sq + (dr, df), board)
             while board.in_bounds(current):
+                target_bit = board._mask(current)
+                is_new_target = not seen & target_bit
+                seen |= target_bit
+
                 occupant = board.get(current)
                 if occupant is None:
-                    yield Move(sq, current)
+                    if is_new_target:
+                        yield Move(sq, current)
                 elif occupant.colour != piece.colour:
-                    yield Move(sq, current, MoveFlag.CAPTURE)
+                    if is_new_target:
+                        yield Move(sq, current, MoveFlag.CAPTURE)
                     break
                 else:
                     break  # Blocked by own piece. Will also block the infinite loop when you run into yourself via wrapping
