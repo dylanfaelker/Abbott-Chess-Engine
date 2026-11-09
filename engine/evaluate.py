@@ -148,7 +148,7 @@ class Evaluator:
         """
         score = 0
         score += self._material(board)
-        score += self._control(board)
+        # score += self._control(board)
         score += self._initiative(board)
         score += self._piece_square(board)
 

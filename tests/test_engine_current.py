@@ -1,11 +1,11 @@
 """Tests for search/evaluation features unique to the current ``engine`` package."""
 
 import unittest
+from unittest.mock import patch
 
 from engine.search import INF, Search
 from infinity_chess.board import Board
-from infinity_chess.move import MoveFlag, Square
-from infinity_chess.move_generator import MoveGenerator
+from infinity_chess.move import MoveFlag, Square, QUIESCENCE_FLAGS
 from infinity_chess.pieces import Colour, Piece, PieceType
 from infinity_chess.rules import InfinityChessRules
 
@@ -52,8 +52,18 @@ class CurrentEngineTests(unittest.TestCase):
                 return 1_000 if pawn and pawn.piece_type is PieceType.PAWN and pawn.colour is Colour.WHITE else 0
 
         search.evaluator = EnPassantAwareEvaluator()
-        legal_moves = MoveGenerator(board, InfinityChessRules()).legal_moves()
-        self.assertEqual(search._quiescence(board, -INF, INF, legal_moves), 1_000)
+        self.assertEqual(search._quiescence(board, -INF, INF), 1_000)
+
+    def test_quiescence_only_legality_checks_tactical_candidates(self) -> None:
+        board = Board.from_fen("4k3/8/8/8/8/8/3p4/3QK3 w - - 0 1")
+        search = Search(board, InfinityChessRules(), isVary=False)
+
+        with patch.object(board, "make_move", wraps=board.make_move) as make_move:
+            search._quiescence(board, -INF, INF)
+
+        checked_moves = [call.args[0] for call in make_move.call_args_list]
+        self.assertTrue(checked_moves)
+        self.assertTrue(all(move.flag in QUIESCENCE_FLAGS for move in checked_moves))
 
     def test_depth_two_search_restores_board_and_caches_subpositions(self) -> None:
         board = Board.from_fen("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1")

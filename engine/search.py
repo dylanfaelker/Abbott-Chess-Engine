@@ -12,7 +12,7 @@ from infinity_chess.move import Move, MoveFlag, SpecialMove, CAPTURE_FLAGS, QUIE
 from infinity_chess.move_generator import MoveGenerator
 from engine.evaluate import Evaluator, PIECE_VALUES
 from infinity_chess.pieces import Colour
-from infinity_chess.rules import RuleSet
+from infinity_chess.rules import InfinityChessRules, RuleSet
 
 MATE_SCORE = 100_000_000
 
@@ -55,7 +55,7 @@ class Search:
             O(1).
         """
         self.board = board
-        self.rules = rules
+        self.rules = rules or InfinityChessRules()
         self.evaluator = Evaluator(isVary)
         self.transposition_table: dict[int, dict] = {}
         self.killer_moves: list[list] = [[None, None] for _ in range(64)]
@@ -211,7 +211,8 @@ class Search:
             alpha (float): Current alpha bound for alpha-beta search.
             beta (float): Current beta bound for alpha-beta search.
             legal_moves (list[Move] | None): Previously generated legal moves, when
-            available.
+            available. Passing this param saved having to find the quiescent legal 
+            moves. Otherwise _legal_quiescence_moves() is called.
 
         Returns:
             int: score; worst-case.
@@ -226,6 +227,10 @@ class Search:
         if score >= beta:  return beta
         alpha = max(alpha, score)
 
+        if legal_moves is None:
+            legal_moves = self._legal_quiescence_moves(board)
+
+
         for move in self._ordered_moves(board, 0, legal_moves):
 
             if move.flag in QUIESCENCE_FLAGS:
@@ -236,6 +241,34 @@ class Search:
                 alpha = max(alpha, s)
 
         return alpha
+
+    def _legal_quiescence_moves(self, board: Board) -> list[Move]:
+        """Return legal tactical moves without generating the full legal list.
+
+        Quiescence only searches captures (including en passant and promotion
+        captures) and quiet promotions.  Filtering the pseudo-legal candidates
+        before the king-safety check avoids making and unmaking every quiet move
+        at each quiescence node.
+
+        Complexity:
+            O(C*A), where C is the number of pseudo-legal tactical candidates
+            and A is the cost of a king-safety check.
+        """
+        colour = board.turn
+        legal_moves = []
+
+        for square, _piece in board.pieces_for(colour):
+            for move in self.rules.pseudo_legal_moves(board, square):
+                if move.flag not in QUIESCENCE_FLAGS:
+                    continue
+
+                undo = board.make_move(move)
+                leaves_king_in_check = self.rules.is_in_check(board, colour)
+                board.unmake_move(undo)
+                if not leaves_king_in_check:
+                    legal_moves.append(move)
+
+        return legal_moves
 
     def _ordered_moves(self, board: Board, ply: int, legal_moves: list[Move] | None = None):
         """
