@@ -7,6 +7,7 @@ L = legal move count, M = candidate moves, and A = king-safety check cost.
 """
 
 from __future__ import annotations
+import time
 from infinity_chess.board import Board
 from infinity_chess.move import Move, MoveFlag
 from infinity_chess.move_generator import MoveGenerator
@@ -16,6 +17,24 @@ from infinity_chess.rules import RuleSet
 
 MATE_SCORE = 100_000_000
 INF = float("inf")
+
+
+class _SearchTimeout(Exception):
+    """Internal: raised inside the tree when the soft deadline passes, to unwind the search."""
+
+
+class _SharedState:
+    """
+    Counters shared by the root Search and every child Search it spawns.
+    (This engine creates a new Search object per node, so per-instance counters
+    would never add up.)
+    """
+    __slots__ = ("nodes", "deadline", "check")
+
+    def __init__(self):
+        self.nodes = 0
+        self.deadline: float | None = None  # time.perf_counter() timestamp; None = no limit
+        self.check = False                  # off during depth 1 so a move is always available
 
 
 class Search:
@@ -53,33 +72,59 @@ class Search:
         self.evaluator = Evaluator(isVary)
         self.transposition_table: dict[int, dict] = {}
         self.killer_moves: list[list] = [[None, None] for _ in range(64)]
-        self.nodes_searched = 0
+        self._shared = _SharedState()
+        self.depth_reached = 0  # deepest iteration that completed (set by find_best_move)
         self.isVary = isVary
 
-    def find_best_move(self, depth: int) -> tuple[Move | None, int]:
+    @property
+    def nodes_searched(self) -> int:
+        """Nodes visited by the last search, across the whole tree."""
+        return self._shared.nodes
+
+    def _tick(self) -> None:
+        """Count a node and abort the search if the soft deadline has passed."""
+        shared = self._shared
+        shared.nodes += 1
+        if shared.check and time.perf_counter() >= shared.deadline:
+            raise _SearchTimeout
+
+    def find_best_move(self, depth: int, time_limit: float | None = None) -> tuple[Move | None, int]:
         """
         Search increasing depths for a best move.
 
         Args:
             depth (int): Maximum search depth or remaining node depth.
+            time_limit (float | None): Soft limit in seconds. When it expires the
+                unfinished iteration is abandoned and the best move from the last
+                completed depth is returned. Depth 1 always completes.
 
         Returns:
             tuple[Move | None, int]: (Move or None, score); worst-case.
+            After the call, `nodes_searched` and `depth_reached` describe the search.
 
         Complexity:
             O(b^d).
         """
-        self.nodes_searched = 0
+        shared = self._shared
+        shared.nodes = 0
+        shared.deadline = None if time_limit is None else time.perf_counter() + time_limit
+        self.depth_reached = 0
         best_move = None
         best_score = -INF
 
         # Iterative deepening
         for current_depth in range(1, depth + 1):
-            move, score = self._root_search(current_depth)
+            shared.check = shared.deadline is not None and current_depth > 1
+            try:
+                move, score = self._root_search(current_depth)
+            except _SearchTimeout:
+                break  # discard the unfinished iteration, keep the last completed one
             if move is not None:
                 best_move = move
                 best_score = score
+                self.depth_reached = current_depth
 
+        shared.check = False
         return best_move, best_score
 
     # def analyze(self, depth: int, top_n: int) -> list[dict]:
@@ -114,6 +159,7 @@ class Search:
         for move in self._ordered_moves(self.board, 0):
             new_board = self.board.apply_move(move)
             child = Search(new_board, self.generator.rules, self.isVary)
+            child._shared = self._shared
             score = -child._negamax(depth - 1, -beta, -alpha, 1)
 
             if score > best_score:
@@ -139,7 +185,7 @@ class Search:
         Complexity:
             O(b^d).
         """
-        self.nodes_searched += 1
+        self._tick()
 
         # Checking if position was already computed via transpotion table.
         key = self.board.zobrist_hash()
@@ -167,6 +213,7 @@ class Search:
         for move in self._ordered_moves(self.board, ply):
             new_board = self.board.apply_move(move)
             child = Search(new_board, self.generator.rules, self.isVary)
+            child._shared = self._shared
             child.transposition_table = self.transposition_table
             child.killer_moves = self.killer_moves
             score = -child._negamax(depth - 1, -beta, -alpha, ply + 1)
@@ -204,6 +251,8 @@ class Search:
         Complexity:
             O(b^q), where q is extension depth.
         """
+        self._tick()
+
         score = self.evaluator.evaluate(self.board) # stand-pat
         if self.board.turn == Colour.BLACK:
             score = -score
@@ -216,6 +265,7 @@ class Search:
             if move.flag == MoveFlag.CAPTURE:
                 new_board = self.board.apply_move(move)
                 child = Search(new_board, self.generator.rules, self.isVary)
+                child._shared = self._shared
                 s = -child._quiescence(-beta, -alpha)
                 if s >= beta:  return beta
                 alpha = max(alpha, s)

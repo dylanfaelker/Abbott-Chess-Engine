@@ -7,6 +7,7 @@ L = legal move count, M = candidate moves, and A = king-safety check cost.
 """
 
 from __future__ import annotations
+import time
 from infinity_chess.board import Board
 from infinity_chess.move import Move, MoveFlag, SpecialMove, CAPTURE_FLAGS, QUIESCENCE_FLAGS
 from infinity_chess.move_generator import MoveGenerator
@@ -22,6 +23,10 @@ TT_EXACT, TT_LOWER, TT_UPPER = 0, 1, 2
 ORDER_VALUES = {pt: min(v, 1000) for pt, v in PIECE_VALUES.items()}
 
 INF = float("inf")
+
+
+class _SearchTimeout(Exception):
+    """Internal: raised inside the tree when the soft deadline passes, to unwind the search."""
 
 
 class Search:
@@ -60,32 +65,47 @@ class Search:
         self.transposition_table: dict[int, dict] = {}
         self.killer_moves: list[list] = [[None, None] for _ in range(64)]
         self.nodes_searched = 0
+        self.depth_reached = 0                # deepest iteration that completed (set by find_best_move)
+        self.deadline: float | None = None    # time.perf_counter() timestamp; None = no time limit
+        self._check_deadline = False          # off during depth 1 so a move is always available
         self.isVary = isVary
 
-    def find_best_move(self, depth: int) -> tuple[Move | None, int]:
+    def find_best_move(self, depth: int, time_limit: float | None = None) -> tuple[Move | None, int]:
         """
         Search increasing depths for a best move.
 
         Args:
             depth (int): Maximum search depth or remaining node depth.
+            time_limit (float | None): Soft limit in seconds. When it expires the
+                unfinished iteration is abandoned and the best move from the last
+                completed depth is returned. Depth 1 always completes.
 
         Returns:
             tuple[Move | None, int]: (Move or None, score); worst-case.
+            After the call, `nodes_searched` and `depth_reached` describe the search.
 
         Complexity:
             O(b^d).
         """
         self.nodes_searched = 0
+        self.depth_reached = 0
+        self.deadline = None if time_limit is None else time.perf_counter() + time_limit
         best_move = None
         best_score = -INF
 
         # Iterative deepening
         for current_depth in range(1, depth + 1):
-            move, score = self._root_search(current_depth)
+            self._check_deadline = self.deadline is not None and current_depth > 1
+            try:
+                move, score = self._root_search(current_depth)
+            except _SearchTimeout:
+                break  # discard the unfinished iteration, keep the last completed one
             if move is not None:
                 best_move = move
                 best_score = score
+                self.depth_reached = current_depth
 
+        self._check_deadline = False
         return best_move, best_score
 
     # def analyze(self, depth: int, top_n: int) -> list[dict]:
@@ -118,8 +138,10 @@ class Search:
 
         for move in self._ordered_moves(self.board, 0):
             undo = self.board.make_move(move)
-            score = -self._negamax(self.board, depth - 1, -beta, -alpha, 1)
-            self.board.unmake_move(undo)
+            try:
+                score = -self._negamax(self.board, depth - 1, -beta, -alpha, 1)
+            finally:
+                self.board.unmake_move(undo)  # also runs when a timeout unwinds the search
 
             if score > best_score:
                 best_score = score
@@ -146,6 +168,8 @@ class Search:
             O(b^d).
         """
         self.nodes_searched += 1
+        if self._check_deadline and time.perf_counter() >= self.deadline:
+            raise _SearchTimeout
 
         # Checking if position was already computed via transpotion table.
         key = board.zobrist_hash()
@@ -174,8 +198,10 @@ class Search:
 
         for move in self._ordered_moves(board, ply, legal_moves):
             undo = board.make_move(move)
-            score = -self._negamax(board, depth - 1, -beta, -alpha, ply + 1)
-            board.unmake_move(undo)
+            try:
+                score = -self._negamax(board, depth - 1, -beta, -alpha, ply + 1)
+            finally:
+                board.unmake_move(undo)
 
             if score > best_score:
                 best_score = score
@@ -220,6 +246,10 @@ class Search:
         Complexity:
             O(b^q)
         """
+        self.nodes_searched += 1
+        if self._check_deadline and time.perf_counter() >= self.deadline:
+            raise _SearchTimeout
+
         score = self.evaluator.evaluate(board) # stand-pat
         if board.turn == Colour.BLACK:
             score = -score
@@ -235,8 +265,10 @@ class Search:
 
             if move.flag in QUIESCENCE_FLAGS:
                 undo = board.make_move(move)
-                s = -self._quiescence(board, -beta, -alpha)
-                board.unmake_move(undo)
+                try:
+                    s = -self._quiescence(board, -beta, -alpha)
+                finally:
+                    board.unmake_move(undo)
                 if s >= beta:  return beta
                 alpha = max(alpha, s)
 

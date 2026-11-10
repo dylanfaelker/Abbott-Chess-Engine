@@ -6,6 +6,7 @@ Complexity notation: b = branching factor and d = search depth.
 """
 
 from __future__ import annotations
+import time
 from infinity_chess.board import Board
 from infinity_chess.move import Move, MoveFlag
 from infinity_chess.move_generator import MoveGenerator
@@ -15,6 +16,24 @@ from infinity_chess.rules import RuleSet
 
 MATE_SCORE = 100_000_000
 INF = float("inf")
+
+
+class _SearchTimeout(Exception):
+    """Internal: raised inside the tree when the soft deadline passes, to unwind the search."""
+
+
+class _SharedState:
+    """
+    Counters shared by the root Search and every child Search it spawns.
+    (This engine creates a new Search object per node, so per-instance counters
+    would never add up.)
+    """
+    __slots__ = ("nodes", "deadline", "check")
+
+    def __init__(self):
+        self.nodes = 0
+        self.deadline: float | None = None  # time.perf_counter() timestamp; None = no limit
+        self.check = False                  # off during depth 1 so a move is always available
 
 
 class Search:
@@ -48,22 +67,75 @@ class Search:
         self.board = board
         self.generator = MoveGenerator(board, rules)
         self.evaluator = Evaluator()
-        self.nodes_searched = 0
+        self._shared = _SharedState()
+        self.depth_reached = 0  # deepest search that completed (set by find_best_move)
 
-    def find_best_move(self, depth: int) -> tuple[Move | None, int]:
+    @property
+    def nodes_searched(self) -> int:
+        """Nodes visited by the last search, across the whole tree."""
+        return self._shared.nodes
+
+    def find_best_move(self, depth: int, time_limit: float | None = None) -> tuple[Move | None, int]:
         """
         Search root moves to a fixed depth.
 
+        Without a time limit this is a single fixed-depth search, exactly as before.
+        This engine has no iterative deepening of its own, so when `time_limit`
+        (seconds) is given it searches depth 1, 2, 3... up to `depth` individually, abandons the
+        iteration that is running when time expires, and returns the move from the
+        last completed depth. Depth 1 always completes.
+
         Args:
             depth (int): Maximum search depth or remaining node depth.
+            time_limit (float | None): Soft limit in seconds.
 
         Returns:
             tuple[Move | None, int]: (Move or None, score); worst-case.
+            After the call, `nodes_searched` and `depth_reached` describe the search.
 
         Complexity:
             O(b^d).
         """
-        self.nodes_searched = 0
+        shared = self._shared
+        shared.nodes = 0
+        shared.deadline = None if time_limit is None else time.perf_counter() + time_limit
+        shared.check = False
+        self.depth_reached = 0
+
+        if time_limit is None:
+            move, score = self._root_search(depth)
+            self.depth_reached = depth
+            return move, score
+
+        best_move = None
+        best_score = -INF
+        for current_depth in range(1, depth + 1):
+            shared.check = current_depth > 1
+            try:
+                move, score = self._root_search(current_depth)
+            except _SearchTimeout:
+                break
+            if move is not None:
+                best_move = move
+                best_score = score
+                self.depth_reached = current_depth
+
+        shared.check = False
+        return best_move, best_score
+
+    def _root_search(self, depth: int) -> tuple[Move | None, int]:
+        """
+        Score each legal root move with a fixed-depth negamax search.
+
+        Args:
+            depth (int): Search depth.
+
+        Returns:
+            tuple[Move | None, int]: best move and score.
+
+        Complexity:
+            O(b^d).
+        """
         best_move = None
         best_score = -INF
         alpha, beta = -INF, INF
@@ -71,6 +143,7 @@ class Search:
         for move in self.generator.legal_moves():
             new_board = self.board.apply_move(move)
             child = Search(new_board, self.generator.rules)
+            child._shared = self._shared
             score = -child._negamax(depth - 1, -beta, -alpha, 1)
 
             if score > best_score:
@@ -96,7 +169,10 @@ class Search:
         Complexity:
             O(b^d).
         """
-        self.nodes_searched += 1
+        shared = self._shared
+        shared.nodes += 1
+        if shared.check and time.perf_counter() >= shared.deadline:
+            raise _SearchTimeout
 
         over, result = self.generator.game_over()
         if over:
@@ -113,6 +189,7 @@ class Search:
         for move in self.generator.legal_moves():
             new_board = self.board.apply_move(move)
             child = Search(new_board, self.generator.rules)
+            child._shared = self._shared
             score = -child._negamax(depth - 1, -beta, -alpha, ply + 1)
 
             best_score = max(best_score, score)
