@@ -1,0 +1,11 @@
+{
+  "name": "v2.3-1.5s-vs-v2.2-3s",
+  "games": 40,
+  "concurrency": 3,
+  "engines": [
+    {"package": "engine",       "name": "v2.3 (half time)", "movetime": 1.5},
+    {"package": "engine_v2_2",  "name": "v2.2",             "movetime": 3.0}
+  ],
+  "openings": {"source": "random", "plies": 6},
+  "max_plies": 300
+}

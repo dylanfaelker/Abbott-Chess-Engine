@@ -1,0 +1,11 @@
+{
+  "name": "working-copy-vs-old-commit",
+  "games": 40,
+  "concurrency": 4,
+  "depth": 3,
+  "engines": [
+    {"package": "engine", "name": "working copy"},
+    {"package": "engine", "name": "v2.3 release", "root": "../abbott-v2.3-worktree"}
+  ],
+  "openings": {"source": "random", "plies": 6}
+}
