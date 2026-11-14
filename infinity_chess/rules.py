@@ -18,6 +18,7 @@ from typing import Optional, Iterator
 from infinity_chess.pieces import Piece, PieceType, Colour
 from infinity_chess.move import Square, Move, SpecialMove, MoveFlag
 from infinity_chess.board import Board
+from infinity_chess.geometry import geometry, KNIGHT_OFFSETS, KING_OFFSETS, ROOK_DIRS, BISHOP_DIRS
 
 
 # ── RuleSet (abstract interface) ──────────────────────────────────────────────
@@ -94,6 +95,21 @@ class RuleSet(ABC):
         Args:
             board (Board): Board position being queried or updated.
             sq (Square): Source or target board square.
+            by_colour (Colour): Attacking side.
+
+        Returns:
+            bool: True when the condition holds; otherwise False.
+        """
+        ...
+
+    @abstractmethod
+    def is_attacked(self, board: Board, idx: int, by: Colour) -> bool:
+        """
+        Test attacks on a target index representing a square.
+
+        Args:
+            board (Board): Board position being queried or updated.
+            idx (int): Source or target board square's index.
             by_colour (Colour): Attacking side.
 
         Returns:
@@ -187,17 +203,13 @@ class RuleSet(ABC):
                 if not in_check:
                     yield move
 
-_ROOKLIKE   = (PieceType.ROOK, PieceType.QUEEN)
-_BISHOPLIKE = (PieceType.BISHOP, PieceType.QUEEN)
+_PAWN, _KNIGHT, _BISHOP = PieceType.PAWN, PieceType.KNIGHT, PieceType.BISHOP
+_ROOK, _QUEEN, _KING = PieceType.ROOK, PieceType.QUEEN, PieceType.KING
 
-KNIGHT_OFFSETS = ((-2,-1),(-2,1),(-1,-2),(-1,2),(1,-2),(1,2),(2,-1),(2,1))
-KING_OFFSETS   = ((-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1))
-ROOK_DIRS      = ((1,0),(-1,0),(0,1),(0,-1))
-BISHOP_DIRS    = ((1,1),(1,-1),(-1,1),(-1,-1))
 SLIDER_DIRS = {
-    PieceType.ROOK:   ROOK_DIRS,
-    PieceType.BISHOP: BISHOP_DIRS,
-    PieceType.QUEEN:  ROOK_DIRS + BISHOP_DIRS,
+    _ROOK:   ROOK_DIRS,
+    _BISHOP: BISHOP_DIRS,
+    _QUEEN:  ROOK_DIRS + BISHOP_DIRS,
 }
 
 # ── StandardRules ─────────────────────────────────────────────────────────────
@@ -213,6 +225,8 @@ class StandardRules(RuleSet):
         O(1) for leapers, O(D) for sliding rays, plus king-safety checks for legal
         moves.
     """
+
+    WRAPS = False
 
     # ── Public RuleSet interface ───────────────────────────────────────────────
 
@@ -308,10 +322,10 @@ class StandardRules(RuleSet):
         Complexity:
             O(P*D).
         """
-        king_sq = board.find_piece(PieceType.KING, colour)
-        if king_sq is None:
-            return False  # No king — can't be in check
-        return self.is_square_attacked(board, king_sq, colour.opponent())
+        bb = board.bitboards[(colour, _KING)]
+        if not bb:
+            return False
+        return self.is_attacked(board, (bb & -bb).bit_length() - 1, colour.opponent())
 
     def is_square_attacked(self, board: Board, sq: Square, by_colour: Colour) -> bool:
         """
@@ -330,44 +344,38 @@ class StandardRules(RuleSet):
             8 rays of length at most D, independent of piece count.
         """
 
-        # Pawns: an attacking pawn moves in direction d, so it sits at sq - (d, ±1).
-        d = 1 if by_colour is Colour.WHITE else -1
-        for df in (-1, 1):
-            t = self._step(board, sq, -d, df)
-            if t is not None:
-                p = board.get(t)
-                if p is not None and p.colour is by_colour and p.piece_type is PieceType.PAWN:
-                    return True
+        return self.is_attacked(board, board._index(sq), by_colour)
 
-        # Knights
-        for dr, df in KNIGHT_OFFSETS:
-            t = self._step(board, sq, dr, df)
-            if t is not None:
-                p = board.get(t)
-                if p is not None and p.colour is by_colour and p.piece_type is PieceType.KNIGHT:
-                    return True
+    def is_attacked(self, board: Board, idx: int, by: Colour) -> bool:
+        g = geometry(board.ranks, board.files, self.WRAPS)
+        cells = board._square_cache       # (PieceType, Colour) | None, never a Piece
 
-        # Kings
-        for dr, df in KING_OFFSETS:
-            t = self._step(board, sq, dr, df)
-            if t is not None:
-                p = board.get(t)
-                if p is not None and p.colour is by_colour and p.piece_type is PieceType.KING:
-                    return True
-
-        # Sliders: walk each ray until the first piece; it attacks only if it
-        # is the right colour and moves along that kind of ray.
-        for dirs, types in ((ROOK_DIRS, _ROOKLIKE), (BISHOP_DIRS, _BISHOPLIKE)):
-            for dr, df in dirs:
-                t = self._step(board, sq, dr, df)
-                while t is not None and t != sq:        # t == sq: wrapped fully round
-                    p = board.get(t)
-                    if p is not None:
-                        if p.colour is by_colour and p.piece_type in types:
-                            return True
-                        break                           # blocked either way
-                    t = self._step(board, t, dr, df)
-
+        for t in g.pawn_from[by is Colour.BLACK][idx]:
+            c = cells[t]
+            if c is not None and c[1] is by and c[0] is _PAWN:
+                return True
+        for t in g.knight[idx]:
+            c = cells[t]
+            if c is not None and c[1] is by and c[0] is _KNIGHT:
+                return True
+        for t in g.king[idx]:
+            c = cells[t]
+            if c is not None and c[1] is by and c[0] is _KING:
+                return True
+        for ray in g.rook_rays[idx]:
+            for t in ray:
+                c = cells[t]
+                if c is not None:
+                    if c[1] is by and (c[0] is _ROOK or c[0] is _QUEEN):
+                        return True
+                    break
+        for ray in g.bishop_rays[idx]:
+            for t in ray:
+                c = cells[t]
+                if c is not None:
+                    if c[1] is by and (c[0] is _BISHOP or c[0] is _QUEEN):
+                        return True
+                    break
         return False
 
     def is_checkmate(self, board: Board, colour: Colour) -> bool:
@@ -675,6 +683,8 @@ class InfinityChessRules(StandardRules):
     Complexity:
         O(1) for leapers; wrapped sliding moves are bounded by O(ranks*files).
     """
+
+    WRAPS = True
     
     @staticmethod
     def wrap_square(sq: Square, board: Board) -> Square:

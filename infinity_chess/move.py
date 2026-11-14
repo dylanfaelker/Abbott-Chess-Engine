@@ -12,7 +12,7 @@ Formatting and parsing costs are stated by each method.
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Optional
+from typing import Optional, NamedTuple
 
 
 class MoveFlag(Enum):
@@ -36,8 +36,7 @@ class MoveFlag(Enum):
 CAPTURE_FLAGS     = frozenset({MoveFlag.CAPTURE, MoveFlag.EN_PASSANT, MoveFlag.PROMOTION_CAPTURE})
 QUIESCENCE_FLAGS  = CAPTURE_FLAGS | {MoveFlag.PROMOTION}
 
-@dataclass(frozen=True)
-class Square:
+class Square(NamedTuple):
     """
     A position on the board as (rank, file), both 0-indexed.
     rank 0 = row 1, file 0 = a-file.
@@ -116,8 +115,7 @@ class Square:
         return f"Square({self.to_algebraic()})"
 
 
-@dataclass(frozen=True)
-class Move:
+class Move(NamedTuple):
     """
     A standard move from one square to another.
 
@@ -125,6 +123,9 @@ class Move:
         from_sq:    Origin square.
         to_sq:      Destination square.
         flag:       What kind of move this is (default: NORMAL).
+        promotion_piece:  Piece type name to promote to (e.g. 'Queen').
+        captured_sq:      Square of captured piece if different from to_sq
+                            (used for en passant where the capture is off the path).
 
     Args:
         from_sq (Square): Origin square of the move.
@@ -140,6 +141,8 @@ class Move:
     from_sq: Square
     to_sq:   Square
     flag:    MoveFlag = MoveFlag.NORMAL
+    promotion_piece: Optional[str]       = None
+    captured_sq:     Optional[Square]    = None
 
     def to_uci(self) -> str:
         """
@@ -151,7 +154,13 @@ class Move:
         Complexity:
             O(1) for ordinary chess coordinates.
         """
-        return f"{self.from_sq.to_algebraic()}{self.to_sq.to_algebraic()}"
+        base = f"{self.from_sq.to_algebraic()}{self.to_sq.to_algebraic()}"
+        if self.promotion_piece:
+            if self.promotion_piece.lower() == "knight":
+                return base + "n"
+            else:
+                return base + self.promotion_piece[0].lower()
+        return base
 
     @staticmethod
     def from_uci(uci: str) -> "Move":
@@ -186,51 +195,5 @@ class Move:
         """
         return f"Move({self.to_uci()} [{self.flag.name}])"
 
-
-@dataclass(frozen=True)
-class SpecialMove(Move):
-    """
-    Extended move carrying extra context for non-standard actions.
-
-    Extra fields:
-        promotion_piece:  Piece type name to promote to (e.g. 'Queen').
-        captured_sq:      Square of captured piece if different from to_sq
-                          (used for en passant where the capture is off the path).
-
-    Example — promotion:
-        SpecialMove(from_sq=e7, to_sq=e8, flag=PROMOTION, promotion_piece='Queen')
-
-    Example — en passant:
-        SpecialMove(from_sq=e5, to_sq=d6, flag=EN_PASSANT, captured_sq=d5)
-
-    Args:
-        promotion_piece (Optional[str]): Promotion piece name, when this is a promotion.
-        captured_sq (Optional[Square]): En-passant capture square when it differs
-            from the destination.
-
-    Returns:
-        SpecialMove instance: immutable move with promotion or capture metadata.
-
-    Complexity:
-        O(1).
-    """
-    promotion_piece: Optional[str]       = None
-    captured_sq:     Optional[Square]    = None
-
-    def to_uci(self) -> str:
-        """
-        Format the move and promotion suffix.
-
-        Returns:
-            str: UCI string.
-
-        Complexity:
-            O(1) for ordinary coordinates.
-        """
-        base = super().to_uci()
-        if self.promotion_piece:
-            if self.promotion_piece.lower() == "knight":
-                return base + "n"
-            else:
-                return base + self.promotion_piece[0].lower()
-        return base
+def SpecialMove(from_sq, to_sq, flag, promotion_piece=None, captured_sq=None) -> Move:
+    return Move(from_sq, to_sq, flag, promotion_piece, captured_sq)

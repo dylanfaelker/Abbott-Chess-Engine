@@ -322,17 +322,17 @@ class Evaluator:
         shift_white = 4 - black_king_file
 
         score = 0
-        for colour in Colour:
-            for sq, piece in board.pieces_for(colour):
-                table = PIECE_TABLES.get(piece.piece_type)
-                if table is None:
-                    continue
-                if piece.colour == Colour.WHITE:
-                    sq = InfinityChessRules.wrap_square(sq + (0, shift_white), board)
-                    idx = (7 - sq.rank) * 8 + sq.file
-                    score += table[idx]
-                else:
-                    sq = InfinityChessRules.wrap_square(sq + (0, shift_black), board) # mirroring for black
-                    idx = sq.rank * 8 + sq.file
-                    score -= table[idx]
+        for piece_type, table in PIECE_TABLES.items():
+            bb = board.bitboards[(Colour.WHITE, piece_type)]
+            while bb:
+                low = bb & -bb # lowest set bit
+                rank, file = divmod(low.bit_length() - 1, 8) # finds the index of the lowest bit, then extracts rank/file
+                score += table[(7 - rank) * 8 + (file + shift_white) % 8] # table look up to account for flipped board in piece square tables
+                bb ^= low # clears lowest bit
+            bb = board.bitboards[(Colour.BLACK, piece_type)]
+            while bb:
+                low = bb & -bb
+                rank, file = divmod(low.bit_length() - 1, 8)
+                score -= table[rank * 8 + (file + shift_black) % 8]
+                bb ^= low
         return score

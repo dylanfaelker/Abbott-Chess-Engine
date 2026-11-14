@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Optional, Iterator
+from typing import Optional, Iterator, NamedTuple
 
-from infinity_chess.move import Move, MoveFlag, SpecialMove, Square
+from infinity_chess.move import Move, MoveFlag, Square
 from infinity_chess.pieces import Colour, Piece, PieceType
+from infinity_chess.geometry import square_table
 
 #TODO move zobrist hashing to its own file
 
@@ -109,8 +110,7 @@ def _piece_obj(piece_type: PieceType, colour: Colour, has_moved: bool) -> Piece:
     return piece
 
 
-@dataclass(frozen=True)
-class UndoState:
+class UndoState(NamedTuple):
     """
     Snapshot of move effects needed to restore a Board.
 
@@ -182,6 +182,7 @@ class Board:
         """
         self.ranks = ranks
         self.files = files
+        self._squares = square_table(ranks, files)
         self._zobrist = _zobrist_keys(ranks, files)
         self.hash = 0
         self._board_mask: int = (1 << (ranks * files)) - 1 # Bitboard full of 1s
@@ -213,6 +214,7 @@ class Board:
         new = Board.__new__(Board)
         new.ranks = self.ranks
         new.files = self.files
+        new._squares = self._squares
         new._zobrist = self._zobrist
         new.hash = self.hash
         new._board_mask = self._board_mask
@@ -270,7 +272,7 @@ class Board:
         Complexity:
             O(1).
         """
-        return Square(idx // self.files, idx % self.files)
+        return self._squares[idx]
 
     @staticmethod
     def _iter_bits(bitboard: int) -> Iterator[int]:
@@ -731,7 +733,7 @@ class Board:
         if move.flag == MoveFlag.EN_PASSANT:
             captured_sq = (
                 move.captured_sq
-                if isinstance(move, SpecialMove) and move.captured_sq is not None
+                if move.captured_sq is not None
                 else Square(move.from_sq.rank, move.to_sq.file)
             )
             captured_idx = self._index(captured_sq)
@@ -877,11 +879,7 @@ class Board:
         self._clear_index(from_idx)
 
         if move.flag in (MoveFlag.PROMOTION, MoveFlag.PROMOTION_CAPTURE):
-            promo_name = (
-                move.promotion_piece
-                if isinstance(move, SpecialMove) and move.promotion_piece
-                else "QUEEN"
-            )
+            promo_name = move.promotion_piece or "QUEEN"
             promo_type = PieceType[promo_name.upper()]
             self._place_piece_at_index(to_idx, promo_type, piece.colour, True)
             return

@@ -9,7 +9,7 @@ L = legal move count, M = candidate moves, and A = king-safety check cost.
 from __future__ import annotations
 import time
 from infinity_chess.board import Board
-from infinity_chess.move import Move, MoveFlag, SpecialMove, CAPTURE_FLAGS, QUIESCENCE_FLAGS
+from infinity_chess.move import Move, MoveFlag, CAPTURE_FLAGS, QUIESCENCE_FLAGS
 from infinity_chess.move_generator import MoveGenerator
 from engine.evaluate import Evaluator, PIECE_VALUES
 from infinity_chess.pieces import Colour
@@ -339,9 +339,7 @@ class Search:
 
             # MVV-LVA Hueristic
             elif move.flag in CAPTURE_FLAGS:
-                victim_sq = move.to_sq
-                if isinstance(move, SpecialMove):
-                    victim_sq = move.captured_sq or move.to_sq
+                victim_sq = move.captured_sq or move.to_sq
                 victim = board.get(victim_sq)
                 attacker = board.get(move.from_sq)
                 v_val = PIECE_VALUES.get(victim.piece_type, 0)   if victim   else 0
