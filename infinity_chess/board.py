@@ -12,6 +12,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 from typing import Optional, Iterator, NamedTuple
+from functools import lru_cache
 
 from infinity_chess.move import Move, MoveFlag, Square
 from infinity_chess.pieces import Colour, Piece, PieceType
@@ -109,6 +110,16 @@ def _piece_obj(piece_type: PieceType, colour: Colour, has_moved: bool) -> Piece:
         _PIECE_CACHE[key] = piece
     return piece
 
+@lru_cache(maxsize=None)
+def _castle_mask(ranks: int, files: int) -> int:
+    """Bitboard of the squares whose contents can affect castling rights."""
+    king = files // 2
+    top = (ranks - 1) * files
+    mask = 0
+    for idx in (king, 0, files - 1, top + king, top, top + files - 1):
+        mask |= 1 << idx
+    return mask
+
 
 class UndoState(NamedTuple):
     """
@@ -186,6 +197,7 @@ class Board:
         self._zobrist = _zobrist_keys(ranks, files)
         self.hash = 0
         self._board_mask: int = (1 << (ranks * files)) - 1 # Bitboard full of 1s
+        self._castle_mask = _castle_mask(ranks, files)
         self.turn: Colour = Colour.WHITE
         self.en_passant_sq: Optional[Square] = None
         self.halfmove_clock: int = 0
@@ -218,6 +230,7 @@ class Board:
         new._zobrist = self._zobrist
         new.hash = self.hash
         new._board_mask = self._board_mask
+        new._castle_mask = self._castle_mask
         new.turn = self.turn
         new.en_passant_sq = self.en_passant_sq
         new.halfmove_clock = self.halfmove_clock
@@ -722,10 +735,6 @@ class Board:
         if piece is None:
             raise ValueError(f"No piece on {move.from_sq}")
 
-        for right in self._castling_rights():
-            self.hash ^= self._zobrist.ZCASTLE[right]
-        if self.en_passant_sq is not None:
-            self.hash ^= self._zobrist.ZEP[self._index(self.en_passant_sq)]
 
         captured_idx: Optional[int] = None
         captured_piece: Optional[Piece] = None
@@ -741,6 +750,17 @@ class Board:
         elif move.flag not in (MoveFlag.CASTLE_KING, MoveFlag.CASTLE_QUEEN):
             captured_idx = to_idx
             captured_piece = self._piece_at_index(to_idx)
+
+        touched = (1 << from_idx) | (1 << to_idx)
+        if captured_idx is not None:
+            touched |= 1 << captured_idx
+        rights_may_change = bool(touched & self._castle_mask)
+        if rights_may_change:
+            for right in self._castling_rights():
+                self.hash ^= self._zobrist.ZCASTLE[right]
+
+        if self.en_passant_sq is not None:
+            self.hash ^= self._zobrist.ZEP[self._index(self.en_passant_sq)]
 
         undo = UndoState(
             move=move,
@@ -777,8 +797,9 @@ class Board:
         self.hash ^= self._zobrist.ZTURN
         if self.en_passant_sq is not None:
             self.hash ^= self._zobrist.ZEP[self._index(self.en_passant_sq)]
-        for right in self._castling_rights():
-            self.hash ^= self._zobrist.ZCASTLE[right]
+        if rights_may_change:
+            for right in self._castling_rights():
+                self.hash ^= self._zobrist.ZCASTLE[right]
         self.zobrist_history.append(self.zobrist_hash())
         return undo
 
