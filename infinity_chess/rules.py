@@ -585,7 +585,7 @@ class StandardRules(RuleSet):
         Complexity:
             O(1) plus attack checks.
         """
-        if piece.has_moved or self.is_in_check(board, piece.colour):
+        if piece.has_moved:
             return
 
         rank = sq.rank
@@ -595,8 +595,9 @@ class StandardRules(RuleSet):
         rook_sq = Square(rank, board.files - 1)
         rook = board.get(rook_sq)
         if rook and rook.piece_type == PieceType.ROOK and not rook.has_moved and rook.colour == piece.colour:
-            path = [Square(rank, sq.file + 1), Square(rank, sq.file + 2)]
-            if all(board.is_empty(s) for s in path):
+            path = [sq, Square(rank, sq.file + 1), Square(rank, sq.file + 2)]       # sq is examined for attacks, thus confirming not in check
+            between = [Square(rank, sq.file + 1), Square(rank, sq.file + 2)]
+            if all(board.is_empty(s) for s in between):
                 if not any(self.is_square_attacked(board, s, opponent) for s in path):
                     yield Move(sq, Square(rank, sq.file + 2), MoveFlag.CASTLE_KING)
 
@@ -604,7 +605,7 @@ class StandardRules(RuleSet):
         rook_sq = Square(rank, 0)
         rook = board.get(rook_sq)
         if rook and rook.piece_type == PieceType.ROOK and not rook.has_moved and rook.colour == piece.colour:
-            path = [Square(rank, sq.file - 1), Square(rank, sq.file - 2)]
+            path = [sq, Square(rank, sq.file - 1), Square(rank, sq.file - 2)]       # sq is examined for attacks, thus confirming not in check
             between = [Square(rank, sq.file - 1), Square(rank, sq.file - 2), Square(rank, sq.file - 3)]
             if all(board.is_empty(s) for s in between):
                 if not any(self.is_square_attacked(board, s, opponent) for s in path):
