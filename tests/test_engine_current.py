@@ -3,7 +3,7 @@
 import unittest
 from unittest.mock import patch
 
-from engine.search import INF, Search
+from engine.search import INF, Search, TT_EXACT
 from infinity_chess.board import Board
 from infinity_chess.move import MoveFlag, Square, QUIESCENCE_FLAGS
 from infinity_chess.pieces import Colour, Piece, PieceType
@@ -39,7 +39,7 @@ class CurrentEngineTests(unittest.TestCase):
 
         self.assertLess(ordered.index(en_passant), ordered.index(quiet_pawn_push))
 
-        search.transposition_table[board.zobrist_hash()] = {"move": quiet_pawn_push}
+        search.transposition_table[board.zobrist_hash()] = (0, 0, TT_EXACT, quiet_pawn_push)
         self.assertEqual(search._ordered_moves(board, 0)[0], quiet_pawn_push)
 
     def test_quiescence_search_includes_en_passant_as_a_tactical_capture(self) -> None:

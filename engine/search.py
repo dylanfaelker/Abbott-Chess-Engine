@@ -25,6 +25,7 @@ ORDER_VALUES = {pt: min(v, 1000) for pt, v in PIECE_VALUES.items()}
 INF = float("inf")
 
 MAX_PLY = 64
+TT_MAX_ENTRIES = 500_000
 
 
 class _SearchTimeout(Exception):
@@ -64,7 +65,7 @@ class Search:
         self.board = board
         self.rules = rules or InfinityChessRules()
         self.evaluator = Evaluator(isVary)
-        self.transposition_table: dict[int, dict] = {}
+        self.transposition_table: dict[int, tuple[int, int, int, Move | None]] = {}
         self.killer_moves: list[list] = [[None, None] for _ in range(MAX_PLY)]
         self.nodes_searched = 0
         self.depth_reached = 0                # deepest iteration that completed (set by find_best_move)
@@ -134,6 +135,19 @@ class Search:
     def _to_tt(self, score, ply):   return score + ply if score >  MATE_SCORE - 1000 else score - ply if score < -MATE_SCORE + 1000 else score
     def _from_tt(self, score, ply): return score - ply if score >  MATE_SCORE - 1000 else score + ply if score < -MATE_SCORE + 1000 else score
 
+    def _tt_store(self, key: int, depth: int, score: int, flag: int, move: Move | None) -> None:
+        """Entries are tuples: (depth, score, flag, move)."""
+        tt = self.transposition_table
+        old = tt.get(key)
+        if old is not None:
+            if depth < old[0]:
+                return                  # depth-preferred: never replace a deeper result
+            if move is None:
+                move = old[3]           # keep the old move as an ordering hint
+        elif len(tt) >= TT_MAX_ENTRIES:
+            tt.clear()                  # size cap
+        tt[key] = (depth, score, flag, move)
+
     def _root_search(self, depth: int) -> tuple[Move | None, int]:
         """
         Score each legal root move.
@@ -165,9 +179,7 @@ class Search:
             alpha = max(alpha, score)
 
         if best_move is not None:
-            self.transposition_table[self.board.zobrist_hash()] = {
-                "depth": depth, "score": best_score, "flag": TT_EXACT, "move": best_move,
-            }
+            self._tt_store(self.board.zobrist_hash(), depth, best_score, TT_EXACT, best_move)
 
         return best_move, best_score
 
@@ -195,8 +207,9 @@ class Search:
         # Checking if position was already computed via transpotion table.
         key = board.zobrist_hash()
         tt_entry = self.transposition_table.get(key)
-        if tt_entry and tt_entry["depth"] >= depth:
-            flag, tt_score = tt_entry["flag"], self._from_tt(tt_entry["score"], ply)
+        if tt_entry is not None and tt_entry[0] >= depth:
+            _, tt_score, flag, _ = tt_entry
+            tt_score = self._from_tt(tt_score, ply)
             if flag == TT_EXACT:                        return tt_score
             if flag == TT_LOWER and tt_score >= beta:   return tt_score
             if flag == TT_UPPER and tt_score <= alpha:  return tt_score
@@ -254,7 +267,7 @@ class Search:
         flag = TT_EXACT
         if best_score <= original_alpha: flag = TT_UPPER
         elif best_score >= beta:         flag = TT_LOWER
-        self.transposition_table[key] = {"depth": depth, "score": self._to_tt(best_score, ply), "flag": flag, "move": best_move}
+        self._tt_store(key, depth, self._to_tt(best_score, ply), flag, None if flag == TT_UPPER else best_move)
 
         return best_score
 
@@ -363,8 +376,7 @@ class Search:
         tt_move = None
         key = board.zobrist_hash()
         tt_entry = self.transposition_table.get(key)
-        if tt_entry and "move" in tt_entry:
-            tt_move = tt_entry["move"]
+        tt_move = tt_entry[3] if tt_entry else None
 
         for move in legal_moves:
             score = 0
