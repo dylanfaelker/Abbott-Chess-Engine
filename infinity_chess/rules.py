@@ -654,28 +654,24 @@ class StandardRules(RuleSet):
             bool: True when the condition holds; otherwise False.
 
         Complexity:
-            O(P).
+            O(1).
         """
-        pieces: list[Piece] = []
-        for colour in Colour:
-            for _, piece in board.pieces_for(colour):
-                pieces.append(piece)
-                if len(pieces) > 4:
-                    return False
-        if len(pieces) == 2: # K vs K
+        count = board.occupied_bitboard().bit_count()
+        if count > 4:
+            return False
+        if count == 2:
             return True
-        if len(pieces) == 3: # K+minor vs K
-            minor = {PieceType.BISHOP, PieceType.KNIGHT}
-            return any(p.piece_type in minor for p in pieces)
-        if len(pieces) == 4: # K+minor vs K+minor
-            minor = {PieceType.BISHOP, PieceType.KNIGHT}
-            non_kings = [p for p in pieces if p.piece_type != PieceType.KING]
-            colours = {p.colour for p in non_kings}
-            return (
-                len(non_kings) == 2
-                and all(p.piece_type in minor for p in non_kings)
-                and len(colours) == 2
-            )
+        
+        minor_white_count = 0
+        minor_black_count = 0
+        for piece_type in [PieceType.BISHOP, PieceType.KNIGHT]:
+            minor_white_count += board.bitboards[Colour.WHITE, piece_type].bit_count()
+        for piece_type in [PieceType.BISHOP, PieceType.KNIGHT]:
+            minor_black_count += board.bitboards[Colour.BLACK, piece_type].bit_count()
+        if count == 3: # K+minor vs K
+            return minor_white_count + minor_black_count == 1
+        if count == 4: # K+minor vs K+minor
+            return minor_white_count == 1 and minor_black_count == 1
         return False
 
     def _is_threefold_repetition(self, board: Board) -> bool:
@@ -692,7 +688,7 @@ class StandardRules(RuleSet):
             O(H).
         """
         current = board.zobrist_hash()
-        return board.zobrist_history.count(current) >= 2
+        return board.zobrist_history[max(0, len(board.zobrist_history) - board.halfmove_clock - 1) :][::-2].count(current) >= 2
 
 
 class InfinityChessRules(StandardRules):

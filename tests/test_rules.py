@@ -66,7 +66,10 @@ class StandardRulesTests(unittest.TestCase):
         self.assertTrue(self.rules.is_draw(fifty_move))
 
         repetition = Board.from_fen("4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1")
-        repetition.zobrist_history.extend([repetition.zobrist_hash(), repetition.zobrist_hash()])
+        same = repetition.zobrist_hash()
+        other = same ^ 1
+        repetition.zobrist_history.extend([other, same, other, same])
+        repetition.halfmove_clock = 6
         self.assertTrue(self.rules.is_draw(repetition))
 
 
