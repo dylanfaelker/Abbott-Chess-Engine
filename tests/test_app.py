@@ -43,8 +43,9 @@ class AppTests(unittest.TestCase):
         class FakeSearch:
             def __init__(self, board, rules) -> None:
                 constructed.append((board, rules))
+                self.depth_reached = 8
 
-            def find_best_move(self, depth: int):
+            def find_best_move(self, depth: int, time_limit: float | None = None):
                 self.depth = depth
                 return Move(Square.from_algebraic("e2"), Square.from_algebraic("e4")), 125
 
@@ -61,9 +62,9 @@ class AppTests(unittest.TestCase):
     def test_version_selector_routes_to_requested_legacy_engine(self) -> None:
         class FakeV21Search:
             def __init__(self, board, rules) -> None:
-                pass
+                self.depth_reached = 1
 
-            def find_best_move(self, depth: int):
+            def find_best_move(self, depth: int, time_limit: float | None = None):
                 return Move(Square.from_algebraic("b1"), Square.from_algebraic("c3")), 0
 
         with patch.object(app_module, "Search_v2_1", FakeV21Search):
@@ -77,9 +78,9 @@ class AppTests(unittest.TestCase):
     def test_engine_without_a_legal_move_returns_client_error(self) -> None:
         class NoMoveSearch:
             def __init__(self, board, rules) -> None:
-                pass
+                self.depth_reached = 8
 
-            def find_best_move(self, depth: int):
+            def find_best_move(self, depth: int, time_limit: float | None = None):
                 return None, 0
 
         with patch.object(app_module, "Search", NoMoveSearch):

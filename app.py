@@ -61,8 +61,12 @@ def get_move():
         return jsonify({"error": "Missing required field: fen"}), 400
  
     fen = data["fen"]
+
     depth = int(data.get("depth", 2))
     depth = max(1, min(depth, 8))
+
+    # TODO add as API param
+    time_limit = 10.0
  
     try:
         board = Board.from_fen(fen)
@@ -85,7 +89,7 @@ def get_move():
         return jsonify({"error": "Game is already over", "result": result}), 400
  
     try:
-        best_move, score = searcher.find_best_move(depth)
+        best_move, score = searcher.find_best_move(depth, time_limit)
 
         if best_move is None:
             return jsonify({"error": "No legal moves available"}), 400
@@ -93,7 +97,7 @@ def get_move():
         return jsonify({
             "move": best_move.to_uci(),
             "eval": score / 100.0,
-            "depth": depth,
+            "depth": searcher.depth_reached,
             "engine": engine,
         }), 200
  
