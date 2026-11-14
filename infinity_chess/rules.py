@@ -454,13 +454,13 @@ class StandardRules(RuleSet):
         Complexity:
             O(M*A) without moves, O(P+H) with them.
         """
-        if self.is_draw(board):
-            return True, "draw"
         colour = board.turn
         moves = legal_moves if legal_moves is not None else list(self.legal_moves(board, colour))
         if not moves:
             if self.is_in_check(board, colour):
                 return True, colour.opponent().value
+            return True, "draw"
+        if self.is_draw(board):
             return True, "draw"
         return False, None
 

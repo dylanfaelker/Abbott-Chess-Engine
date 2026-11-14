@@ -3,6 +3,7 @@
 - Bug fixes
 - Bitboards
 - make/unmake moves
+- Removed Control in evaluation
 
 
 # V2.2

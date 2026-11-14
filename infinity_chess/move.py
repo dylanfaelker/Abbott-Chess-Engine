@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Optional, NamedTuple
-
+import re
 
 class MoveFlag(Enum):
     """
@@ -114,6 +114,8 @@ class Square(NamedTuple):
         """
         return f"Square({self.to_algebraic()})"
 
+_UCI_RE = re.compile(r"^([a-z])(\d+)([a-z])(\d+)([qrbn]?)$")
+_PROMOTION_NAMES = {"q": "QUEEN", "r": "ROOK", "b": "BISHOP", "n": "KNIGHT"}
 
 class Move(NamedTuple):
     """
@@ -176,12 +178,16 @@ class Move(NamedTuple):
         Complexity:
             O(len(uci)).
         """
-        if len(uci) < 4:
+        m = _UCI_RE.match(uci.strip().lower())
+        if not m:
             raise ValueError(f"Invalid UCI move: {uci!r}")
-        return Move(
-            from_sq=Square.from_algebraic(uci[:2]),
-            to_sq=Square.from_algebraic(uci[2:4]),
-        )
+        from_file, from_rank, to_file, to_rank, promo = m.groups()
+        from_sq = Square(int(from_rank) - 1, ord(from_file) - ord("a"))
+        to_sq = Square(int(to_rank) - 1, ord(to_file) - ord("a"))
+        if promo:
+            return Move(from_sq, to_sq, MoveFlag.PROMOTION,
+                        promotion_piece=_PROMOTION_NAMES[promo])
+        return Move(from_sq, to_sq)
 
     def __repr__(self) -> str:
         """

@@ -24,6 +24,8 @@ ORDER_VALUES = {pt: min(v, 1000) for pt, v in PIECE_VALUES.items()}
 
 INF = float("inf")
 
+MAX_PLY = 64
+
 
 class _SearchTimeout(Exception):
     """Internal: raised inside the tree when the soft deadline passes, to unwind the search."""
@@ -63,12 +65,13 @@ class Search:
         self.rules = rules or InfinityChessRules()
         self.evaluator = Evaluator(isVary)
         self.transposition_table: dict[int, dict] = {}
-        self.killer_moves: list[list] = [[None, None] for _ in range(64)]
+        self.killer_moves: list[list] = [[None, None] for _ in range(MAX_PLY)]
         self.nodes_searched = 0
         self.depth_reached = 0                # deepest iteration that completed (set by find_best_move)
         self.deadline: float | None = None    # time.perf_counter() timestamp; None = no time limit
         self._check_deadline = False          # off during depth 1 so a move is always available
         self.isVary = isVary
+        self._root_best: tuple[Move | None, float] = (None, -INF)
 
     def find_best_move(self, depth: int, time_limit: float | None = None) -> tuple[Move | None, int]:
         """
@@ -95,10 +98,13 @@ class Search:
 
         # Iterative deepening
         for current_depth in range(1, depth + 1):
-            self._check_deadline = self.deadline is not None and current_depth > 1
+            self._check_deadline = self.deadline is not None
+            self._root_best = (None, -INF)
             try:
                 move, score = self._root_search(current_depth)
             except _SearchTimeout:
+                if self._root_best[0] is not None:
+                    best_move, best_score = self._root_best
                 break  # discard the unfinished iteration, keep the last completed one
             if move is not None:
                 best_move = move
@@ -106,6 +112,12 @@ class Search:
                 self.depth_reached = current_depth
 
         self._check_deadline = False
+
+        if best_move is None:
+            ordered = self._ordered_moves(self.board, 0)
+            if ordered:
+                best_move, best_score = ordered[0], 0
+
         return best_move, best_score
 
     # def analyze(self, depth: int, top_n: int) -> list[dict]:
@@ -118,6 +130,9 @@ class Search:
 
     #     results.sort(key=lambda r: r["score"], reverse=True)
     #     return results[:top_n]
+
+    def _to_tt(self, score, ply):   return score + ply if score >  MATE_SCORE - 1000 else score - ply if score < -MATE_SCORE + 1000 else score
+    def _from_tt(self, score, ply): return score - ply if score >  MATE_SCORE - 1000 else score + ply if score < -MATE_SCORE + 1000 else score
 
     def _root_search(self, depth: int) -> tuple[Move | None, int]:
         """
@@ -146,7 +161,13 @@ class Search:
             if score > best_score:
                 best_score = score
                 best_move = move
+                self._root_best = (best_move, best_score)
             alpha = max(alpha, score)
+
+        if best_move is not None:
+            self.transposition_table[self.board.zobrist_hash()] = {
+                "depth": depth, "score": best_score, "flag": TT_EXACT, "move": best_move,
+            }
 
         return best_move, best_score
 
@@ -175,10 +196,10 @@ class Search:
         key = board.zobrist_hash()
         tt_entry = self.transposition_table.get(key)
         if tt_entry and tt_entry["depth"] >= depth:
-            flag, tt_score = tt_entry["flag"], tt_entry["score"]
-            if flag == TT_EXACT:              return tt_score
-            if flag == TT_LOWER and tt_score >= beta:  return tt_score
-            if flag == TT_UPPER and tt_score <= alpha: return tt_score
+            flag, tt_score = tt_entry["flag"], self._from_tt(tt_entry["score"], ply)
+            if flag == TT_EXACT:                        return tt_score
+            if flag == TT_LOWER and tt_score >= beta:   return tt_score
+            if flag == TT_UPPER and tt_score <= alpha:  return tt_score
 
         gen = MoveGenerator(board, self.rules)
         legal_moves = gen.legal_moves()
@@ -190,7 +211,10 @@ class Search:
             return 0 # draw
 
         if depth == 0:
-            return self._quiescence(board, alpha, beta, legal_moves)
+            if ply < MAX_PLY and self.rules.is_in_check(board, board.turn):
+                depth = 1 # check extension: forced to find evasions
+            else:
+                return self._quiescence(board, alpha, beta, legal_moves)
 
         original_alpha = alpha
         best_score = -INF
@@ -218,7 +242,7 @@ class Search:
         flag = TT_EXACT
         if best_score <= original_alpha: flag = TT_UPPER
         elif best_score >= beta:         flag = TT_LOWER
-        self.transposition_table[key] = {"depth": depth, "score": best_score, "flag": flag, "move": best_move}
+        self.transposition_table[key] = {"depth": depth, "score": self._to_tt(best_score, ply), "flag": flag, "move": best_move}
 
         return best_score
 
@@ -342,8 +366,8 @@ class Search:
                 victim_sq = move.captured_sq or move.to_sq
                 victim = board.get(victim_sq)
                 attacker = board.get(move.from_sq)
-                v_val = PIECE_VALUES.get(victim.piece_type, 0)   if victim   else 0
-                a_val = PIECE_VALUES.get(attacker.piece_type, 0) if attacker else 0
+                v_val = ORDER_VALUES.get(victim.piece_type, 0)   if victim   else 0
+                a_val = ORDER_VALUES.get(attacker.piece_type, 0) if attacker else 0
                 score = 10_000 + 10 * v_val - a_val # max 18_900, min 10_100
 
             # Killer Hueristic
@@ -351,7 +375,12 @@ class Search:
                 score = 9_000
 
             elif move.flag in (MoveFlag.PROMOTION, MoveFlag.PROMOTION_CAPTURE):
-                score = 8_000
+                if move.promotion_piece.lower() == "queen":
+                    score = 8_000
+                elif move.promotion_piece.lower() == "rook":
+                    score = 7_999
+                else:
+                    score = 7_998
 
             scored.append((score, move))
 
