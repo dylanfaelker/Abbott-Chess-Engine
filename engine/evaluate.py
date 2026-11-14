@@ -172,9 +172,12 @@ class Evaluator:
         """
         score = 0
         for colour in Colour:
-            for _, piece in board.pieces_for(colour):
-                value = PIECE_VALUES.get(piece.piece_type, 0)
-                score += value if piece.colour == Colour.WHITE else -value
+            for piece_type in PieceType:
+                if piece_type == PieceType.KING:
+                    continue
+                value = PIECE_VALUES.get(piece_type, 0)
+                bb = board.bitboards[colour, piece_type]
+                score += value * bb.bit_count() * (-1 if colour == Colour.BLACK else 1)
         return score
 
     def  _control(self, board: Board) -> int:
