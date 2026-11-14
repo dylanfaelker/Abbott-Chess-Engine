@@ -9,7 +9,7 @@ from infinity_chess.rules import InfinityChessRules, StandardRules
 
 
 def moves_from(rules: StandardRules, board: Board, square: str):
-    return list(rules.pseudo_legal_moves(board, Square.from_algebraic(square)))
+    return list(rules.pseudo_legal_moves_from(board, Square.from_algebraic(square)))
 
 
 class StandardRulesTests(unittest.TestCase):

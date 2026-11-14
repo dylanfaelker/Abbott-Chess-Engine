@@ -29,7 +29,7 @@ class MoveGeneratorTests(unittest.TestCase):
         board = Board.from_fen("4k3/8/8/8/8/8/4R3/4K3 w - - 0 1")
         generator = MoveGenerator(board, StandardRules())
 
-        self.assertIn("e2e8", {move.to_uci() for move in generator.pseudo_legal_moves(Square.from_algebraic("e2"))})
+        self.assertIn("e2e8", {move.to_uci() for move in generator.pseudo_legal_moves_from(Square.from_algebraic("e2"))})
         self.assertTrue(generator.is_square_attacked(Square.from_algebraic("e8"), Colour.WHITE))
         self.assertFalse(generator.is_in_check(Colour.WHITE))
 

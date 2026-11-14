@@ -1,9 +1,12 @@
 # V2.3
 - Efficiency improvements (some of these also improved previous versions)
 - Bug fixes
-- Bitboards
+- Bitboards/Mailbox hybrid with attack tables
 - make/unmake moves
 - Removed Control in evaluation
+- Lazy legality checking
+- Incremental Zobrist hashing
+- Reverse attack detection
 
 
 # V2.2

@@ -220,18 +220,20 @@ class Evaluator:
 
         # White king danger
         white_king_sq = board.find_piece(PieceType.KING, Colour.WHITE)
-        for target in self._king_ring(board, white_king_sq, rules):
-            pressure = black_attacks[target] - white_attacks[target]
-            if pressure > 0:
-                score -= pressure * 20
+        if white_king_sq is not None:
+            for target in self._king_ring(board, white_king_sq, rules):
+                pressure = black_attacks[target] - white_attacks[target]
+                if pressure > 0:
+                    score -= pressure * 20
 
 
         # Black king danger
         black_king_sq = board.find_piece(PieceType.KING, Colour.BLACK)
-        for target in self._king_ring(board, black_king_sq, rules):
-            pressure = white_attacks[target] - black_attacks[target]
-            if pressure > 0:
-                score += pressure * 20
+        if black_king_sq is not None:
+            for target in self._king_ring(board, black_king_sq, rules):
+                pressure = white_attacks[target] - black_attacks[target]
+                if pressure > 0:
+                    score += pressure * 20
 
         return score
 
@@ -315,11 +317,12 @@ class Evaluator:
             return 0
 
         # Positions are centered so the opposing king is in the e file
-        white_king_file = board.find_piece(PieceType.KING, Colour.WHITE).file
-        shift_black = 4 - white_king_file
-
-        black_king_file = board.find_piece(PieceType.KING, Colour.BLACK).file
-        shift_white = 4 - black_king_file
+        white_king = board.find_piece(PieceType.KING, Colour.WHITE)
+        black_king = board.find_piece(PieceType.KING, Colour.BLACK)
+        if white_king is None or black_king is None:
+            return 0
+        shift_black = 4 - white_king.file
+        shift_white = 4 - black_king.file
 
         score = 0
         for piece_type, table in PIECE_TABLES.items():

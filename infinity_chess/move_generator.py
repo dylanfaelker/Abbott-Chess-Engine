@@ -98,7 +98,25 @@ class MoveGenerator:
         all_legal = self.legal_moves(piece.colour)
         return [m for m in all_legal if m.from_sq == sq]
 
-    def pseudo_legal_moves(self, sq: Square) -> list[Move]:
+    def pseudo_legal_moves(self, colour: Optional[Colour] = None) -> list[Move]:
+        """
+        Return all pseudo legal moves (not filtered for check) for `colour` (defaults to board.turn).
+        Useful for highlighting attacked squares even if the king is exposed.
+        Returns a list (not a generator) so it can be iterated multiple times.
+
+        Args:
+            colour (Optional[Colour]): Piece side or side being queried.
+
+        Returns:
+            list[Move]: Move list.
+
+        Complexity:
+            O(M), based on candidate moves M
+        """
+        colour = colour or self.board.turn
+        return list(self.rules.pseudo_legal_moves(self.board, colour))
+
+    def pseudo_legal_moves_from(self, sq: Square) -> list[Move]:
         """
         Pseudo-legal moves from a square (not filtered for check).
         Useful for highlighting attacked squares even if the king is exposed.
@@ -112,7 +130,7 @@ class MoveGenerator:
         Complexity:
             O(D), where D is the longest board ray.
         """
-        return list(self.rules.pseudo_legal_moves(self.board, sq))
+        return list(self.rules.pseudo_legal_moves_from(self.board, sq))
 
     def attacks_from(self, sq: Square) -> list[Square]:
         """

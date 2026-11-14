@@ -201,28 +201,37 @@ class Search:
             if flag == TT_LOWER and tt_score >= beta:   return tt_score
             if flag == TT_UPPER and tt_score <= alpha:  return tt_score
 
-        gen = MoveGenerator(board, self.rules)
-        legal_moves = gen.legal_moves()
-        over, result = gen.game_over(legal_moves)
-        if over:
-            if result in ("white", "black"):
-                loser = Colour.WHITE if result == "black" else Colour.BLACK
-                return -(MATE_SCORE - ply) if board.turn == loser else (MATE_SCORE - ply) # to prefer earlier mates
-            return 0 # draw
-
         if depth == 0:
             if ply < MAX_PLY and self.rules.is_in_check(board, board.turn):
                 depth = 1 # check extension: forced to find evasions
             else:
-                return self._quiescence(board, alpha, beta, legal_moves)
-
+                return self._quiescence(board, alpha, beta)
+            
         original_alpha = alpha
         best_score = -INF
         best_move = None
 
-        for move in self._ordered_moves(board, ply, legal_moves):
+        gen = MoveGenerator(board, self.rules)
+
+        # edge case to handle game thats already won TODO maybe just check in find_best_move if the game is already over
+        # opponent_in_check = self.rules.is_in_check(board, Colour.opponent(board.turn))
+
+        # cheap draw checks first
+        if self.rules.is_draw(board):
+            _, result = gen.game_over() # prioritise mate over 50 move draw
+            if result != "draw":
+                return -(MATE_SCORE - ply) if self.rules.is_in_check(board, board.turn) else (MATE_SCORE - ply)
+            else:
+                return 0
+            
+        colour, legal_found = board.turn, False
+        pseudo_moves = gen.pseudo_legal_moves()
+        for move in self._ordered_moves(board, ply, pseudo_moves):
             undo = board.make_move(move)
             try:
+                if self.rules.is_in_check(board, colour):
+                    continue    # illegal
+                legal_found = True
                 score = -self._negamax(board, depth - 1, -beta, -alpha, ply + 1)
             finally:
                 board.unmake_move(undo)
@@ -237,6 +246,9 @@ class Search:
                     self.killer_moves[ply][1] = self.killer_moves[ply][0]
                     self.killer_moves[ply][0] = move
                 break
+
+        if not legal_found: # game over
+            return -(MATE_SCORE - ply) if self.rules.is_in_check(board, colour) else 0
 
         # Updating the transpotion table
         flag = TT_EXACT
@@ -314,7 +326,7 @@ class Search:
         legal_moves = []
 
         for square, _piece in board.pieces_for(colour):
-            for move in self.rules.pseudo_legal_moves(board, square):
+            for move in self.rules.pseudo_legal_moves_from(board, square):
                 if move.flag not in QUIESCENCE_FLAGS:
                     continue
 

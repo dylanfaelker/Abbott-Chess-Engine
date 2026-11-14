@@ -187,7 +187,7 @@ class UciServer:
         if not m:
             raise ValueError(f"Malformed move {uci!r}")
         from_sq = self.Square(int(m.group(2)) - 1, ord(m.group(1)) - ord("a"))
-        for move in self.rules.pseudo_legal_moves(board, from_sq):
+        for move in self.rules.pseudo_legal_moves_from(board, from_sq):
             if move.to_uci() == uci:
                 board.make_move(move)
                 return

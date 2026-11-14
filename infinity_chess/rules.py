@@ -38,7 +38,7 @@ class RuleSet(ABC):
     """
 
     @abstractmethod
-    def pseudo_legal_moves(self, board: Board, sq: Square) -> Iterator[Move]:
+    def pseudo_legal_moves_from(self, board: Board, sq: Square) -> Iterator[Move]:
         """
         Yield all moves a piece on `sq` could make ignoring check.
         'Pseudo-legal' means geometrically valid but not yet filtered for
@@ -177,13 +177,13 @@ class RuleSet(ABC):
         """
         ...
 
-    def legal_moves(self, board: Board, colour: Colour) -> Iterator[Move]:
+    def pseudo_legal_moves(self, board: Board, colour: Colour) -> Iterator[Move]:
         """
         Yield all fully legal moves for `colour`. aka pseudo-legal filtered
         to exclude moves that leave the king in check.
 
         This default implementation works for any RuleSet that correctly
-        implements pseudo_legal_moves and is_in_check.
+        implements pseudo_legal_moves_from.
 
         Args:
             board (Board): Board position being queried or updated.
@@ -196,7 +196,29 @@ class RuleSet(ABC):
             O(M*A), where M is candidate move count and A is check cost.
         """
         for sq, piece in board.pieces_for(colour):
-            for move in self.pseudo_legal_moves(board, sq):
+            for move in self.pseudo_legal_moves_from(board, sq):
+                    yield move
+
+    def legal_moves(self, board: Board, colour: Colour) -> Iterator[Move]:
+        """
+        Yield all fully legal moves for `colour`. aka pseudo-legal filtered
+        to exclude moves that leave the king in check.
+
+        This default implementation works for any RuleSet that correctly
+        implements pseudo_legal_moves_from and is_in_check.
+
+        Args:
+            board (Board): Board position being queried or updated.
+            colour (Colour): Piece side or side being queried.
+
+        Returns:
+            Iterator[Move]: legal-move iterator.
+
+        Complexity:
+            O(M*A), where M is candidate move count and A is check cost.
+        """
+        for sq, piece in board.pieces_for(colour):
+            for move in self.pseudo_legal_moves_from(board, sq):
                 undo = board.make_move(move)
                 in_check = self.is_in_check(board, colour)
                 board.unmake_move(undo)
@@ -230,7 +252,7 @@ class StandardRules(RuleSet):
 
     # ── Public RuleSet interface ───────────────────────────────────────────────
 
-    def pseudo_legal_moves(self, board: Board, sq: Square) -> Iterator[Move]:
+    def pseudo_legal_moves_from(self, board: Board, sq: Square) -> Iterator[Move]:
         """
         Dispatch generation for the piece at a square.
 
