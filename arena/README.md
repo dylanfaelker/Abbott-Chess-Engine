@@ -100,7 +100,7 @@ python -m arena run --engine engine:name=d4,depth=4 --engine engine:name=d3,dept
 
 Safety net: an engine that does not answer is killed and loses (`move_timeout`, default 600 s, applies to engines that have no time limit; timed engines are killed at 3 x movetime + 5 s or at clock + 1 s).
 
-> **Read this before using short time limits.** The engines cannot stop in the middle of depth 1, and in a busy middlegame a depth-1 search (with quiescence) can take over a second in Python. So at e.g. 0.3 s per move the engines overshoot constantly, sit at depth 1, and the match degenerates into "depth 1 vs depth 1". The report prints a **NOTE** when an engine exceeds its movetime on more than 10% of moves. Use 2-3 s/move or more, or clocks of a few minutes. (A cheap future engine improvement: return the best root move found so far if depth 1 itself runs out of time.)
+> **Read this before using short time limits.** The first couple engines cannot stop in the middle of depth 1, and in a busy middlegame a depth-1 search (with quiescence) can take over a second in Python. So at e.g. 0.3 s per move the engines overshoot constantly, sit at depth 1, and the match degenerates into "depth 1 vs depth 1". The report prints a **NOTE** when an engine exceeds its movetime on more than 10% of moves. Use 2-3 s/move or more, or clocks of a few minutes. (A cheap future engine improvement: return the best root move found so far if depth 1 itself runs out of time.)
 
 ## Openings
 
