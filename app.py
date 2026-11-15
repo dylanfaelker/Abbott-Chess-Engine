@@ -1,3 +1,5 @@
+"""Flask API for chess-engine health checks and move searches."""
+
 import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -10,13 +12,22 @@ from infinity_chess.move_generator import MoveGenerator
 from infinity_chess.rules import InfinityChessRules
 from engine.search import Search
 from engine_v2_1.search import Search as Search_v2_1
+from engine_v2_2.search import Search as Search_v2_2
 
 app = Flask(__name__)
 CORS(app, origins=["https://www.dylanfaelker.com", "http://localhost:3000"])
 
 @app.route("/health", methods=["GET"])
 def health():
-    """Wake-up call to ping Render"""
+    """
+    Report service health.
+
+    Returns:
+        tuple[Response, int]: JSON status response and HTTP 200.
+
+    Complexity:
+        O(1).
+    """
     return jsonify({"status": "ok"}), 200
 
 
@@ -24,17 +35,25 @@ def health():
 def get_move():
     """
     Get the engine's best move for a given position.
- 
+
     Request body:
         fen    (str):  FEN string of the current position
         depth  (int):  Search depth (default: 2, max: 8). Higher = stronger but slower.
         engine (str):  Engine version (defaults to latest engine).
- 
+
     Response:
         move   (str):   Best move in UCI format e.g. "e2e4", "e7e8q"
         eval   (float): Centipawn evaluation from the perspective of the side to move
         depth  (int):   Depth actually searched
         engine (str):   Actual engine used
+
+    Returns:
+        tuple[Response, int]: JSON response with the move and evaluation, or an
+            error response with its HTTP status.
+
+    Complexity:
+        dominated by selected engine search, approximately O(b^d) without pruning,
+    where b is branching factor and d is search depth.
     """
     data = request.get_json()
  
@@ -42,8 +61,12 @@ def get_move():
         return jsonify({"error": "Missing required field: fen"}), 400
  
     fen = data["fen"]
+
     depth = int(data.get("depth", 2))
     depth = max(1, min(depth, 8))
+
+    # TODO add as API param
+    time_limit = 10.0
  
     try:
         board = Board.from_fen(fen)
@@ -53,10 +76,12 @@ def get_move():
     # Choosing the engine
     engine = data.get("engine", "latest")
     if engine == "v2.1":
-        searcher = Search_v2_1(board)
+        searcher = Search_v2_1(board, InfinityChessRules())
+    elif engine == "v2.2":
+        searcher = Search_v2_2(board, InfinityChessRules())
     else:
-        engine = "v2.2"
-        searcher = Search(board)
+        engine = "v2.3"
+        searcher = Search(board, InfinityChessRules())
  
     gen = MoveGenerator(board, InfinityChessRules())
     over, result = gen.game_over()
@@ -64,7 +89,7 @@ def get_move():
         return jsonify({"error": "Game is already over", "result": result}), 400
  
     try:
-        best_move, score = searcher.find_best_move(depth)
+        best_move, score = searcher.find_best_move(depth, time_limit)
 
         if best_move is None:
             return jsonify({"error": "No legal moves available"}), 400
@@ -72,7 +97,7 @@ def get_move():
         return jsonify({
             "move": best_move.to_uci(),
             "eval": score / 100.0,
-            "depth": depth,
+            "depth": searcher.depth_reached,
             "engine": engine,
         }), 200
  
