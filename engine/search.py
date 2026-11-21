@@ -24,7 +24,7 @@ from infinity_chess.move_generator import MoveGenerator
 from evaluate import Evaluator, PIECE_VALUES
 from infinity_chess.pieces import Colour, PieceType
 from infinity_chess.rules import InfinityChessRules, RuleSet
-from config import MATE_SCORE, DELTA_MARGIN, HISTORY_MAX, PROMOTION_HUERISTIC_MAX, HASH_MOVE_SCORE, MVV_LVA_BASE, KILLER_MOVE_SCORE
+from config import MATE_SCORE, DELTA_MARGIN, HISTORY_MAX, PROMOTION_HUERISTIC_MAX, HASH_MOVE_SCORE, MVV_LVA_BASE, KILLER_MOVE_SCORE, MATE_KILLER_SCORE, MATE_BOUND
 from abbott import is_endgame
 
 TT_EXACT, TT_LOWER, TT_UPPER = 0, 1, 2
@@ -77,6 +77,7 @@ class Search:
         self.evaluator = Evaluator(isVary)
         self.transposition_table: dict[int, tuple[int, int, int, Move | None]] = {}
         self.killer_moves: list[list] = [[None, None] for _ in range(MAX_PLY)]
+        self.mate_killers: list[Move | None] = [None] * MAX_PLY
         n = board.ranks * board.files
         self.history = [0] * (2 * n * n) # # [colour][from][to], flattened
         self.nodes_searched = 0
@@ -144,8 +145,8 @@ class Search:
     #     results.sort(key=lambda r: r["score"], reverse=True)
     #     return results[:top_n]
 
-    def _to_tt(self, score, ply):   return score + ply if score >  MATE_SCORE - 1000 else score - ply if score < -MATE_SCORE + 1000 else score
-    def _from_tt(self, score, ply): return score - ply if score >  MATE_SCORE - 1000 else score + ply if score < -MATE_SCORE + 1000 else score
+    def _to_tt(self, score, ply):   return score + ply if score >  MATE_BOUND else score - ply if score < -MATE_SCORE + 1000 else score
+    def _from_tt(self, score, ply): return score - ply if score >  MATE_BOUND else score + ply if score < -MATE_SCORE + 1000 else score
 
     def _tt_store(self, key: int, depth: int, score: int, flag: int, move: Move | None) -> None:
         """Entries are tuples: (depth, score, flag, move)."""
@@ -270,8 +271,12 @@ class Search:
             if alpha >= beta: # beta-cutoff -> killer move
 
                 if move.flag not in CAPTURE_FLAGS: # killer moves are only "quiet" moves
-                    self.killer_moves[ply][1] = self.killer_moves[ply][0]
-                    self.killer_moves[ply][0] = move
+                    if alpha >= MATE_BOUND: # Mate killer
+                        self.mate_killers[ply][1] = self.mate_killers[ply][0]
+                        self.mate_killers[ply][0] = move
+                    elif self.killer_moves[0] != move:
+                        self.killer_moves[ply][1] = self.killer_moves[ply][0]
+                        self.killer_moves[ply][0] = move
 
                 if move.flag not in QUIESCENCE_FLAGS:              # truly quiet: no capture, no promotion
                     bonus = min(32 * depth * depth, 1200) # 32 scales the memory length (smaller = longer memory)
@@ -434,9 +439,15 @@ class Search:
                 a_val = ORDER_VALUES.get(attacker.piece_type, 0) if attacker else 0
                 score = MVV_LVA_BASE + 10 * v_val - a_val # max 18_900, min 10_000
 
+            # Mate Killer Hueristic
+            elif move == self.mate_killers[ply]:
+                score = MATE_KILLER_SCORE
+
             # Killer Hueristic
-            elif move in self.killer_moves[ply]:
+            elif move == self.killer_moves[ply][0]:
                 score = KILLER_MOVE_SCORE
+            elif move == self.killer_moves[ply][1]:
+                score = KILLER_MOVE_SCORE - 1
 
             # Promotion Hueristics
             elif move.flag in (MoveFlag.PROMOTION, MoveFlag.PROMOTION_CAPTURE):
