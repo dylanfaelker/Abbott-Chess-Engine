@@ -1,12 +1,17 @@
+# V2.4
+- Adding back King Safety with increased efficiency
+    - Set to 40 cp per extra attacker near king
+
 # V2.3
 - Efficiency improvements (some of these also improved previous versions)
 - Bug fixes
 - Bitboards/Mailbox hybrid with attack tables
 - make/unmake moves
-- Removed Control in evaluation
+- Removed Control and King Safety in evaluation
 - Lazy legality checking
 - Incremental Zobrist hashing
 - Reverse attack detection
+- Refined move ordering of promition types
 
 
 # V2.2

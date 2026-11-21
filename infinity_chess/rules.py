@@ -118,6 +118,22 @@ class RuleSet(ABC):
         ...
 
     @abstractmethod
+    def count_attackers(self, board, idx: int, by: Colour) -> int:
+        """
+        Number of `by` pieces attacking square `idx`.
+
+        Mirrors is_attacked but counts instead of returning early.
+        Like attacks_from, each piece is counted once, sliders stop at the first
+        blocker, and friendly-occupied squares count as defended.
+
+        Args:
+            board (Board): Board position being queried or updated.
+            idx (int): Source or target board square's index.
+            by_colour (Colour): Attacking side.
+        """
+        ...
+
+    @abstractmethod
     def is_checkmate(self, board: Board, colour: Colour) -> bool:
         """
         Test check plus no legal escape.
@@ -399,6 +415,48 @@ class StandardRules(RuleSet):
                         return True
                     break
         return False
+
+    def count_attackers(self, board, idx: int, by: Colour) -> int:
+        """
+        Number of `by` pieces attacking square `idx`.
+
+        Mirrors is_attacked but counts instead of returning early.
+        Like attacks_from, each piece is counted once, sliders stop at the first
+        blocker, and friendly-occupied squares count as defended.
+        """
+        g = geometry(board.ranks, board.files, self.WRAPS)
+        cells = board._square_cache       # (PieceType, Colour) | None, never a Piece
+
+        n = 0
+        for t in g.pawn_from[by is Colour.BLACK][idx]:
+            c = cells[t]
+            if c is not None and c[1] is by and c[0] is _PAWN:
+                n += 1
+        for t in g.knight[idx]:
+            c = cells[t]
+            if c is not None and c[1] is by and c[0] is _KNIGHT:
+                n += 1
+        for t in g.king[idx]:
+            c = cells[t]
+            if c is not None and c[1] is by and c[0] is _KING:
+                n += 1
+        for ray in g.rook_rays[idx]:
+            for t in ray:
+                c = cells[t]
+                if c is not None:
+                    if c[1] is by and (c[0] is _ROOK or c[0] is _QUEEN):
+                        n += 1
+                    else:
+                        break # only stop looking when finding a blocking piece. doesn't skip over batteries
+        for ray in g.bishop_rays[idx]:
+            for t in ray:
+                c = cells[t]
+                if c is not None:
+                    if c[1] is by and (c[0] is _BISHOP or c[0] is _QUEEN):
+                        n += 1
+                    else:
+                        break
+        return n
 
     def is_checkmate(self, board: Board, colour: Colour) -> bool:
         """
