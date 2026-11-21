@@ -101,6 +101,10 @@ This lets Abbott treat mate as more important than ordinary material or position
 
 Instead of creating a list of legal moves at each node, create a list of pseudo-legal moves. Only check the legality of a move when actually examining the child node after making the move. With the use of move ordering and alpha-beta pruning, most moves will be discarded. This saves the cost of checking each of those other moves for king safety.
 
+### 9. Delta Pruning [^deltapruning]
+
+In a quiescense search, we are checking for captures and promotions that will improve the position. This is only possible if there exists a promotion/capture that could even come close to improving the position. So we test if the improvement required to continue searching is no larger than the most valuable opponent piece plus a margin of 200 as a safety for other positional benfits that could come from said capture. Pawn promotions are also considered as a source of improvement since they can boost the evaluation by a large portion in a single move.
+
 ## Evaluation
 
 Abbott's evaluator is a **hand-crafted evaluation** function.[^hce] It does not learn weights from data. Instead, the scoring rules are written explicitly in code.
@@ -187,6 +191,7 @@ Why not: In 100 games of v2.3c (with board control) vs v2.3 (regular) with a 1 s
 [^alphabeta]: [Alpha-Beta](https://www.chessprogramming.org/Alpha-Beta)
 [^centipawn]: [Centipawns](https://www.chessprogramming.org/Centipawns)
 [^classical]: [Classical Approach](https://www.chessprogramming.org/Classical_Approach)
+[^deltapruning]: [Delta Pruning](https://chessprogramming.org/Delta_Pruning)
 [^hashmove]: [Hash Move](https://www.chessprogramming.org/Hash_Move)
 [^hce]: [Evaluation](https://www.chessprogramming.org/Evaluation)
 [^horizon]: [Horizon Effect](https://www.chessprogramming.org/Horizon_Effect)

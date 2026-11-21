@@ -8,11 +8,11 @@ L = legal move count, M = candidate moves, and A = king-safety check cost.
 
 from __future__ import annotations
 import time
-from infinity_chess.board import Board
+from infinity_chess.board import Board, _pre_promotion_masks
 from infinity_chess.move import Move, MoveFlag, CAPTURE_FLAGS, QUIESCENCE_FLAGS
 from infinity_chess.move_generator import MoveGenerator
 from engine.evaluate import Evaluator, PIECE_VALUES
-from infinity_chess.pieces import Colour
+from infinity_chess.pieces import Colour, PieceType
 from infinity_chess.rules import InfinityChessRules, RuleSet
 
 MATE_SCORE = 100_000_000
@@ -299,9 +299,26 @@ class Search:
         if self._check_deadline and time.perf_counter() >= self.deadline:
             raise _SearchTimeout
 
-        score = self.evaluator.evaluate(board) # stand-pat
+        # stand-pat
+        score = self.evaluator.evaluate(board)
         if board.turn == Colour.BLACK:
             score = -score
+
+        # TODO turn off in late game
+        # Delta pruning
+        delta = 0
+        for pt in (PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT, PieceType.PAWN):
+            if (board.bitboards[board.turn.opponent(), pt] != 0): 
+                delta = PIECE_VALUES[pt]
+                break
+
+        white_promo_mask, black_promo_mask = _pre_promotion_masks(board.ranks, board.files)
+        promo_mask = white_promo_mask if board.turn == Colour.WHITE else black_promo_mask
+        if board.bitboards[board.turn, PieceType.PAWN] & promo_mask:
+            delta += PIECE_VALUES[PieceType.QUEEN] - PIECE_VALUES[PieceType.PAWN]
+            
+        if score + delta + 200 < alpha: # DELTA_MARGIN is 200
+            return alpha
 
         if score >= beta:  return beta
         alpha = max(alpha, score)
