@@ -11,7 +11,7 @@ import time
 from infinity_chess.board import Board
 from infinity_chess.move import Move, MoveFlag
 from infinity_chess.move_generator import MoveGenerator
-from engine_v2_2.evaluate import Evaluator, PIECE_VALUES
+from evaluate import Evaluator, PIECE_VALUES
 from infinity_chess.pieces import Colour
 from infinity_chess.rules import RuleSet
 
