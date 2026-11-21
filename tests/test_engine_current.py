@@ -47,9 +47,9 @@ class CurrentEngineTests(unittest.TestCase):
         search = Search(board, InfinityChessRules(), isVary=False)
 
         class EnPassantAwareEvaluator:
-            def evaluate(self, position: Board) -> int:
+            def evaluate_and_materials(self, position: Board):
                 pawn = position.get(Square.from_algebraic("d6"))
-                return 1_000 if pawn and pawn.piece_type is PieceType.PAWN and pawn.colour is Colour.WHITE else 0
+                return 1_000 if pawn and pawn.piece_type is PieceType.PAWN and pawn.colour is Colour.WHITE else 0, 3300, 3300
 
         search.evaluator = EnPassantAwareEvaluator()
         self.assertEqual(search._quiescence(board, -INF, INF), 1_000)

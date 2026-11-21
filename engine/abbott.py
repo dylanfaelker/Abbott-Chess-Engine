@@ -1,6 +1,6 @@
 from infinity_chess.board import Board
 from infinity_chess.pieces import Colour, PieceType
-from config import PIECE_VALUES
+from config import PIECE_VALUES, ENDGAME_MATERIAL_THRESHOLD
 
 def is_endgame(board: Board) -> bool:
     """
@@ -23,4 +23,4 @@ def is_endgame(board: Board) -> bool:
             value = PIECE_VALUES.get(piece_type, 0)
             bb = board.bitboards[colour, piece_type]
             total_mat += value * bb.bit_count()
-    return total_mat <= 28 
+    return total_mat <= ENDGAME_MATERIAL_THRESHOLD

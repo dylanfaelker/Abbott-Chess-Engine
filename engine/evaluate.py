@@ -17,7 +17,7 @@ from infinity_chess.move import Square
 from infinity_chess.pieces import Piece, PieceType, Colour
 from infinity_chess.rules import InfinityChessRules
 from infinity_chess.geometry import geometry
-from config import PIECE_VALUES, PIECE_TABLES, SIGMA, CONTROL_OWN_HALF, CONTROL_OPPONENT_HALF, KING_DANGER, INITIATIVE_VAL
+from config import PIECE_VALUES, PIECE_TABLES, SIGMA, CONTROL_OWN_HALF, CONTROL_OPPONENT_HALF, KING_DANGER, INITIATIVE_VAL, ENDGAME_MATERIAL_THRESHOLD
 from abbott import is_endgame
 
 class Evaluator:
@@ -64,10 +64,30 @@ class Evaluator:
         Complexity:
             O(P*D).
         """
+        return self.evaluate_and_materials(board)[0]
+
+    def evaluate_and_materials(self, board: Board):
+        """
+        Score a position from White's perspective.
+
+        Args:
+            board (Board): Board position being queried or updated.
+
+        Returns:
+            int: centipawn integer.
+            int: whites material count.
+            int: blacks material count.
+
+        Complexity:
+            O(P*D).
+        """
         score = 0
-        score += self._material(board)
+        white_mat, black_mat = self._material(board)
+        score += white_mat - black_mat
         # score += self._control(board)
-        if not is_endgame(board):
+        count_white_pawns = board.bitboards[Colour.WHITE, PieceType.PAWN].bit_count()
+        count_black_pawns = board.bitboards[Colour.BLACK, PieceType.PAWN].bit_count()
+        if white_mat + black_mat - (count_white_pawns + count_black_pawns) * 100 > ENDGAME_MATERIAL_THRESHOLD:
             score += self._king_safety(board)
         score += self._initiative(board)
         score += self._piece_square(board)
@@ -75,7 +95,7 @@ class Evaluator:
         if self.isVary:
             score += random.randint(-SIGMA, SIGMA)
 
-        return score
+        return score, white_mat, black_mat
 
     def _material(self, board: Board) -> int:
         """
@@ -85,20 +105,25 @@ class Evaluator:
             board (Board): Board position being queried or updated.
 
         Returns:
-            int: material score.
+            int: material score of white.
+            int: material score of black.
 
         Complexity:
             O(P).
         """
-        score = 0
+        score_white = 0
+        score_black = 0
         for colour in Colour:
             for piece_type in PieceType:
                 if piece_type == PieceType.KING:
                     continue
                 value = PIECE_VALUES.get(piece_type, 0)
                 bb = board.bitboards[colour, piece_type]
-                score += value * bb.bit_count() * (-1 if colour == Colour.BLACK else 1)
-        return score
+                if colour == Colour.WHITE:
+                    score_white += value * bb.bit_count()
+                if colour == Colour.BLACK:
+                    score_black += value * bb.bit_count()
+        return score_white, score_black
 
     def  _control(self, board: Board) -> int:
         """

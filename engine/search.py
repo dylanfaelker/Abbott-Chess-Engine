@@ -24,7 +24,7 @@ from infinity_chess.move_generator import MoveGenerator
 from evaluate import Evaluator, PIECE_VALUES
 from infinity_chess.pieces import Colour, PieceType
 from infinity_chess.rules import InfinityChessRules, RuleSet
-from config import MATE_SCORE, DELTA_MARGIN
+from config import MATE_SCORE, DELTA_MARGIN, ENDGAME_MATERIAL_THRESHOLD
 from abbott import is_endgame
 
 TT_EXACT, TT_LOWER, TT_UPPER = 0, 1, 2
@@ -309,12 +309,14 @@ class Search:
         if self._check_deadline and time.perf_counter() >= self.deadline:
             raise _SearchTimeout
 
-        score = self.evaluator.evaluate(board) # stand-pat
+        score, white_mat, black_mat = self.evaluator.evaluate_and_materials(board) # stand-pat
         if board.turn == Colour.BLACK:
             score = -score
 
         # Delta pruning
-        if not is_endgame(board):
+        count_white_pawns = board.bitboards[Colour.WHITE, PieceType.PAWN].bit_count()
+        count_black_pawns = board.bitboards[Colour.BLACK, PieceType.PAWN].bit_count()
+        if white_mat + black_mat - (count_white_pawns + count_black_pawns) * 100 > ENDGAME_MATERIAL_THRESHOLD:
             delta = 0
             for pt in (PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT, PieceType.PAWN):
                 if (board.bitboards[board.turn.opponent(), pt] != 0): 
