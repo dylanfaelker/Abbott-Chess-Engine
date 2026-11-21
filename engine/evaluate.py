@@ -17,91 +17,7 @@ from infinity_chess.move import Square
 from infinity_chess.pieces import Piece, PieceType, Colour
 from infinity_chess.rules import InfinityChessRules
 from infinity_chess.geometry import geometry
-
-
-PIECE_VALUES: dict[PieceType, int] = {
-    PieceType.PAWN: 100,
-    PieceType.KNIGHT: 300,
-    PieceType.BISHOP: 400,
-    PieceType.ROOK: 500,
-    PieceType.QUEEN: 900,
-    PieceType.KING: 100000,
-}
-
-PAWN_TABLE = [
-     0,  0,  0,  0,  0,  0,  0,  0,
-    50, 50, 50, 50, 50, 50, 50, 50,
-    10, 10, 20, 30, 30, 20, 10, 10,
-     5,  5, 10, 25, 25, 10,  5,  5,
-     0,  0,  0, 20, 20,  0,  0,  0,
-    -5, -5,-10,  0,  0,-10, -5, -5,
-    10, 10, 10,-20,-20, 10, 10, 10,
-     0,  0,  0,  0,  0,  0,  0,  0,
-]
-
-KNIGHT_TABLE = [
-    -40,-30,-30,-30,-30,-30,-30,-30,
-      0,  0,  0,  0,  0,  0,  0,  0,
-     -5,  0, 10, 15, 15, 10,  0, -5,
-      0,  5, 15, 20, 20, 15,  5,  0,
-     -5,  0, 15, 20, 20, 15,  0, -5,
-      0,  5, 10, 15, 15, 10,  5,  0,
-      0,  0,  0,  5,  5,  0,  0,  0,
-    -40,-30,-30,-30,-30,-30,-30,-30,
-]
-
-BISHOP_TABLE = [
-    -20,-10,-10,-10,-10,-10,-10,-20,
-      0,  0,  0,  0,  0,  0,  0,  0,
-      0,  0,  0,  5,  5,  0,  0,  0,
-      0,  5,  5, 10, 10,  5,  5,  0,
-      5, 10, 10, 10, 10, 10, 10,  5,
-     10, 10, 10, 10, 10, 10, 10, 10,
-     10, 10,  0,  0,  0,  0, 10, 10,
-    -10,-10,-10,-10,-10,-10,-10,-10,
-]
-
-ROOK_TABLE = [
-     0,  0,  0,  0,  0,  0,  0,  0,
-    10, 10, 10, 10, 10, 10, 10, 10,
-     0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  0,  5,  5,  5,  0,  0,
-]
-
-QUEEN_TABLE = [
-    -10,-10,-10, -5, -5, -5,-10,-10,
-     -5,  0,  0,  0,  0,  0,  0,  0,
-      0,  0,  0,  5,  5,  5,  0,  0,
-      0,  0,  0,  5,  5,  5,  0,  0,
-      0,  0,  0,  5,  5,  5,  0,  0,
-      0,  0,  0,  5,  5,  5,  0,  0,
-      0,  0,  0,  0,  0,  0,  0,  0,
-    -10,-10,-10,-10, -5,-10,-10,-10,
-]
-
-KING_TABLE = [
-    -50,-50,-50,-50,-50,-50,-50,-50,
-    -50,-50,-50,-50,-50,-50,-50,-50,
-    -50,-50,-50,-30,-30,-40,-50,-50,
-    -50,-50,-50,-40,-40,-40,-50,-50,
-    -30,-30,-30,-30,-30,-30,-30,-30,
-    -10,-10,-20,-20,-20,-20,-20,-10,
-     20, 20,  0,  0,  0,  0,  0, 20,
-     30, 20, 10,  0,  0,  0, 10, 20,
-]
-
-PIECE_TABLES: dict[PieceType, list[int]] = {
-    PieceType.PAWN:   PAWN_TABLE,
-    PieceType.KNIGHT: KNIGHT_TABLE,
-    PieceType.BISHOP: BISHOP_TABLE,
-    PieceType.ROOK:   ROOK_TABLE,
-    PieceType.QUEEN:  QUEEN_TABLE,
-    PieceType.KING:   KING_TABLE,
-}
+from config import PIECE_VALUES, PIECE_TABLES, SIGMA, CONTROL_OWN_HALF, CONTROL_OPPONENT_HALF, KING_DANGER, INITIATIVE_VAL
 
 
 class Evaluator:
@@ -151,12 +67,12 @@ class Evaluator:
         score = 0
         score += self._material(board)
         # score += self._control(board)
-        score += self._king_safety(board) # TODO turn off in late game
+        score += self._king_safety(board)
         score += self._initiative(board)
         score += self._piece_square(board)
 
         if self.isVary:
-            score += random.randint(-5, 5)
+            score += random.randint(-SIGMA, SIGMA)
 
         return score
 
@@ -212,16 +128,16 @@ class Evaluator:
         # White control
         for target, count in white_attacks.items():
             if self._is_other_side(board, Colour.WHITE, target):
-                score += 10# * count
+                score += CONTROL_OPPONENT_HALF# * count
             else:
-                score += 5# * count
+                score += CONTROL_OWN_HALF# * count
 
         # Black control
         for target, count in black_attacks.items():
             if self._is_other_side(board, Colour.BLACK, target):
-                score -= 10# * count
+                score -= CONTROL_OPPONENT_HALF# * count
             else:
-                score -= 5# * count
+                score -= CONTROL_OWN_HALF# * count
 
         return score
 
@@ -259,7 +175,7 @@ class Evaluator:
                     continue                      # no pressure: skip the defender count
                 defenders = self._rules.count_attackers(board, idx, king_colour)
                 if attackers > defenders:
-                    score += sign * (attackers - defenders) * 40
+                    score += sign * (attackers - defenders) * KING_DANGER
 
         return score
 
@@ -321,8 +237,6 @@ class Evaluator:
         Complexity:
             O(1).
         """
-
-        INITIATIVE_VAL = 10
 
         return INITIATIVE_VAL if board.turn == Colour.WHITE else -1 * INITIATIVE_VAL
     

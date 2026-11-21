@@ -7,15 +7,21 @@ L = legal move count, M = candidate moves, and A = king-safety check cost.
 """
 
 from __future__ import annotations
+from pathlib import Path
+import sys
+
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
 import time
 from infinity_chess.board import Board, _pre_promotion_masks
 from infinity_chess.move import Move, MoveFlag, CAPTURE_FLAGS, QUIESCENCE_FLAGS
 from infinity_chess.move_generator import MoveGenerator
-from engine.evaluate import Evaluator, PIECE_VALUES
+from evaluate import Evaluator, PIECE_VALUES
 from infinity_chess.pieces import Colour, PieceType
 from infinity_chess.rules import InfinityChessRules, RuleSet
-
-MATE_SCORE = 100_000_000
+from config import MATE_SCORE, DELTA_MARGIN
 
 TT_EXACT, TT_LOWER, TT_UPPER = 0, 1, 2
 
@@ -299,8 +305,7 @@ class Search:
         if self._check_deadline and time.perf_counter() >= self.deadline:
             raise _SearchTimeout
 
-        # stand-pat
-        score = self.evaluator.evaluate(board)
+        score = self.evaluator.evaluate(board) # stand-pat
         if board.turn == Colour.BLACK:
             score = -score
 
@@ -316,8 +321,8 @@ class Search:
         promo_mask = white_promo_mask if board.turn == Colour.WHITE else black_promo_mask
         if board.bitboards[board.turn, PieceType.PAWN] & promo_mask:
             delta += PIECE_VALUES[PieceType.QUEEN] - PIECE_VALUES[PieceType.PAWN]
-            
-        if score + delta + 200 < alpha: # DELTA_MARGIN is 200
+
+        if score + delta + DELTA_MARGIN < alpha:
             return alpha
 
         if score >= beta:  return beta

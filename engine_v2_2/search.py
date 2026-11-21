@@ -7,11 +7,18 @@ L = legal move count, M = candidate moves, and A = king-safety check cost.
 """
 
 from __future__ import annotations
+from pathlib import Path
+import sys
+
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+    
 import time
 from infinity_chess.board import Board
 from infinity_chess.move import Move, MoveFlag
 from infinity_chess.move_generator import MoveGenerator
-from engine_v2_2.evaluate import Evaluator, PIECE_VALUES
+from evaluate import Evaluator, PIECE_VALUES
 from infinity_chess.pieces import Colour
 from infinity_chess.rules import RuleSet
 
