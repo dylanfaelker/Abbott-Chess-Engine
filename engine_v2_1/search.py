@@ -9,9 +9,12 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-_HERE = str(Path(__file__).resolve().parent)
-if _HERE not in sys.path:
-    sys.path.insert(0, _HERE)
+_ENGINE_DIR = str(Path(__file__).resolve().parent)
+if sys.path and sys.path[0] != _ENGINE_DIR:
+    if _ENGINE_DIR in sys.path:
+        sys.path.remove(_ENGINE_DIR)
+    sys.path.insert(0, _ENGINE_DIR)
+    sys.modules.pop("evaluate", None)
 
 import time
 from infinity_chess.board import Board
