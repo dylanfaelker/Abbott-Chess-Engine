@@ -90,8 +90,8 @@ class Evaluator:
         count_white_pawns = board.bitboards[Colour.WHITE, PieceType.PAWN].bit_count()
         count_black_pawns = board.bitboards[Colour.BLACK, PieceType.PAWN].bit_count()
         phase_value = white_mat + black_mat - (count_white_pawns + count_black_pawns) * 100
-        is_endgame = phase_value > ENDGAME_PHASE_THRESHOLD
-        if is_endgame:
+        is_endgame = phase_value <= ENDGAME_PHASE_THRESHOLD
+        if not is_endgame:
             score += self._king_safety(board)
         
         score += self._initiative(board)

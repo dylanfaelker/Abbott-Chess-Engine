@@ -314,7 +314,7 @@ class Search:
             score = -score
 
         # Delta pruning
-        if is_endgame:
+        if not is_endgame:
             delta = 0
             for pt in (PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT, PieceType.PAWN):
                 if (board.bitboards[board.turn.opponent(), pt] != 0): 
