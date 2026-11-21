@@ -24,7 +24,7 @@ from infinity_chess.move_generator import MoveGenerator
 from evaluate import Evaluator, PIECE_VALUES
 from infinity_chess.pieces import Colour, PieceType
 from infinity_chess.rules import InfinityChessRules, RuleSet
-from config import MATE_SCORE, DELTA_MARGIN, ENDGAME_MATERIAL_THRESHOLD
+from config import MATE_SCORE, DELTA_MARGIN
 from abbott import is_endgame
 
 TT_EXACT, TT_LOWER, TT_UPPER = 0, 1, 2

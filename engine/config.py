@@ -4,8 +4,6 @@ MATE_SCORE = 100_000_000
 
 DELTA_MARGIN = 200
 
-ENDGAME_MATERIAL_THRESHOLD = 2800
-
 SIGMA = 5
 
 PIECE_VALUES: dict[PieceType, int] = {
@@ -16,6 +14,9 @@ PIECE_VALUES: dict[PieceType, int] = {
     PieceType.QUEEN: 900,
     PieceType.KING: 100000,
 }
+
+MAX_PHASE = 2 * PIECE_VALUES[PieceType.QUEEN] + 4 * (PIECE_VALUES[PieceType.ROOK] + PIECE_VALUES[PieceType.BISHOP] + PIECE_VALUES[PieceType.KNIGHT]) # 6400
+ENDGAME_PHASE_THRESHOLD = 2800
 
 CONTROL_OWN_HALF = 5
 CONTROL_OPPONENT_HALF = 10
@@ -99,15 +100,15 @@ PIECE_TABLES: dict[PieceType, list[int]] = {
     PieceType.KING:   KING_TABLE,
 }
 
-PAWN_TABLE_EG = [
-     0,  0,  0,  0,  0,  0,  0,  0,   # rank 8 (unreachable)
-    90, 90, 90, 90, 90, 90, 90, 90,   # one step from promotion
-    55, 55, 55, 55, 55, 55, 55, 55,
-    30, 30, 30, 30, 30, 30, 30, 30,
-    15, 15, 15, 15, 15, 15, 15, 15,
-     5,  5,  5,  5,  5,  5,  5,  5,
-     0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  0,  0,  0,  0,  0,  0,
+PAWN_TABLE_EG = [ # extra 20cp when king is outside the box of the pawn
+      0,   0,   0,  0,  0,  0,   0,   0,   # rank 8 (unreachable)
+    110, 110, 110, 90, 90, 90, 110, 110,   # one step from promotion
+     75,  75,  55, 55, 55, 55,  55,  75,
+     50,  30,  30, 30, 30, 30,  30,  30,
+     15,  15,  15, 15, 15, 15,  15,  15,
+      5,   5,   5,  5,  5,  5,   5,   5,
+      0,   0,   0,  0,  0,  0,   0,   0,
+      0,   0,   0,  0,  0,  0,   0,   0,
 ]
 
 KNIGHT_TABLE_EG = [

@@ -17,7 +17,7 @@ from infinity_chess.move import Square
 from infinity_chess.pieces import Piece, PieceType, Colour
 from infinity_chess.rules import InfinityChessRules
 from infinity_chess.geometry import geometry
-from config import PIECE_VALUES, PIECE_TABLES, PIECE_TABLES_EG, SIGMA, CONTROL_OWN_HALF, CONTROL_OPPONENT_HALF, KING_DANGER, INITIATIVE_VAL, ENDGAME_MATERIAL_THRESHOLD
+from config import PIECE_VALUES, PIECE_TABLES, PIECE_TABLES_EG, SIGMA, CONTROL_OWN_HALF, CONTROL_OPPONENT_HALF, KING_DANGER, INITIATIVE_VAL, ENDGAME_PHASE_THRESHOLD, MAX_PHASE
 from abbott import is_endgame
 
 class Evaluator:
@@ -81,16 +81,22 @@ class Evaluator:
             O(P*D).
         """
         score = 0
+
         white_mat, black_mat = self._material(board)
         score += white_mat - black_mat
+
         # score += self._control(board)
+
         count_white_pawns = board.bitboards[Colour.WHITE, PieceType.PAWN].bit_count()
         count_black_pawns = board.bitboards[Colour.BLACK, PieceType.PAWN].bit_count()
-        is_endgame = white_mat + black_mat - (count_white_pawns + count_black_pawns) * 100 > ENDGAME_MATERIAL_THRESHOLD
+        phase_value = white_mat + black_mat - (count_white_pawns + count_black_pawns) * 100
+        is_endgame = phase_value > ENDGAME_PHASE_THRESHOLD
         if is_endgame:
             score += self._king_safety(board)
+        
         score += self._initiative(board)
-        score += self._piece_square(board, is_endgame)
+        
+        score += self._piece_square(board, phase_value)
 
         if self.isVary:
             score += random.randint(-SIGMA, SIGMA)
@@ -266,12 +272,13 @@ class Evaluator:
 
         return INITIATIVE_VAL if board.turn == Colour.WHITE else -1 * INITIATIVE_VAL
     
-    def _piece_square(self, board: Board, is_endgame: bool = False) -> int:
+    def _piece_square(self, board: Board, game_phase: int = MAX_PHASE) -> int:
         """
         Apply 8x8 piece-square tables.
 
         Args:
             board (Board): Board position being queried or updated.
+            game_phase (int): Material value left representing what phase of the game we are in
 
         Returns:
             int: positional score (zero off 8x8).
@@ -297,16 +304,21 @@ class Evaluator:
 
         score = 0
         for piece_type, table in PIECE_TABLES.items():
+            eg_table = PIECE_TABLES_EG[piece_type]
             bb = board.bitboards[(Colour.WHITE, piece_type)]
             while bb:
                 low = bb & -bb # lowest set bit
                 rank, file = divmod(low.bit_length() - 1, 8) # finds the index of the lowest bit, then extracts rank/file
-                score += table[(7 - rank) * 8 + (file + shift_white) % 8] # table look up to account for flipped board in piece square tables
+                pst_score = table[(7 - rank) * 8 + (file + shift_white) % 8] # table look up to account for flipped board in piece square tables
+                eg_pst_score = eg_table[(7 - rank) * 8 + (file + shift_white) % 8]
+                score += (pst_score * game_phase // MAX_PHASE + eg_pst_score * (MAX_PHASE - game_phase) // MAX_PHASE) # linear combination of the normal and endgame PSTs
                 bb ^= low # clears lowest bit
             bb = board.bitboards[(Colour.BLACK, piece_type)]
             while bb:
                 low = bb & -bb
                 rank, file = divmod(low.bit_length() - 1, 8)
-                score -= table[rank * 8 + (file + shift_black) % 8]
+                pst_score = table[rank * 8 + (file + shift_black) % 8]
+                eg_pst_score = eg_table[rank * 8 + (file + shift_black) % 8]
+                score -= (pst_score * game_phase // MAX_PHASE + eg_pst_score * (MAX_PHASE - game_phase) // MAX_PHASE)
                 bb ^= low
         return score
