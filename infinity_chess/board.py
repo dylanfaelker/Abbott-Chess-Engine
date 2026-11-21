@@ -120,6 +120,12 @@ def _castle_mask(ranks: int, files: int) -> int:
         mask |= 1 << idx
     return mask
 
+@lru_cache(maxsize=None)
+def _pre_promotion_masks(ranks: int, files: int) -> tuple[int, int]:
+    """(white, black) bitboards of the rank each side's pawns promote from."""
+    row = (1 << files) - 1
+    return row << ((ranks - 2) * files), row << files
+
 
 class UndoState(NamedTuple):
     """
