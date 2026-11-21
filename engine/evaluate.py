@@ -17,92 +17,8 @@ from infinity_chess.move import Square
 from infinity_chess.pieces import Piece, PieceType, Colour
 from infinity_chess.rules import InfinityChessRules
 from infinity_chess.geometry import geometry
-
-
-PIECE_VALUES: dict[PieceType, int] = {
-    PieceType.PAWN: 100,
-    PieceType.KNIGHT: 300,
-    PieceType.BISHOP: 400,
-    PieceType.ROOK: 500,
-    PieceType.QUEEN: 900,
-    PieceType.KING: 100000,
-}
-
-PAWN_TABLE = [
-     0,  0,  0,  0,  0,  0,  0,  0,
-    50, 50, 50, 50, 50, 50, 50, 50,
-    10, 10, 20, 30, 30, 20, 10, 10,
-     5,  5, 10, 25, 25, 10,  5,  5,
-     0,  0,  0, 20, 20,  0,  0,  0,
-    -5, -5,-10,  0,  0,-10, -5, -5,
-    10, 10, 10,-20,-20, 10, 10, 10,
-     0,  0,  0,  0,  0,  0,  0,  0,
-]
-
-KNIGHT_TABLE = [
-    -40,-30,-30,-30,-30,-30,-30,-30,
-      0,  0,  0,  0,  0,  0,  0,  0,
-     -5,  0, 10, 15, 15, 10,  0, -5,
-      0,  5, 15, 20, 20, 15,  5,  0,
-     -5,  0, 15, 20, 20, 15,  0, -5,
-      0,  5, 10, 15, 15, 10,  5,  0,
-      0,  0,  0,  5,  5,  0,  0,  0,
-    -40,-30,-30,-30,-30,-30,-30,-30,
-]
-
-BISHOP_TABLE = [
-    -20,-10,-10,-10,-10,-10,-10,-20,
-      0,  0,  0,  0,  0,  0,  0,  0,
-      0,  0,  0,  5,  5,  0,  0,  0,
-      0,  5,  5, 10, 10,  5,  5,  0,
-      5, 10, 10, 10, 10, 10, 10,  5,
-     10, 10, 10, 10, 10, 10, 10, 10,
-     10, 10,  0,  0,  0,  0, 10, 10,
-    -10,-10,-10,-10,-10,-10,-10,-10,
-]
-
-ROOK_TABLE = [
-     0,  0,  0,  0,  0,  0,  0,  0,
-    10, 10, 10, 10, 10, 10, 10, 10,
-     0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  0,  0,  0,  0,  0,  0,
-     0,  0,  0,  5,  5,  5,  0,  0,
-]
-
-QUEEN_TABLE = [
-    -10,-10,-10, -5, -5, -5,-10,-10,
-     -5,  0,  0,  0,  0,  0,  0,  0,
-      0,  0,  0,  5,  5,  5,  0,  0,
-      0,  0,  0,  5,  5,  5,  0,  0,
-      0,  0,  0,  5,  5,  5,  0,  0,
-      0,  0,  0,  5,  5,  5,  0,  0,
-      0,  0,  0,  0,  0,  0,  0,  0,
-    -10,-10,-10,-10, -5,-10,-10,-10,
-]
-
-KING_TABLE = [
-    -50,-50,-50,-50,-50,-50,-50,-50,
-    -50,-50,-50,-50,-50,-50,-50,-50,
-    -50,-50,-50,-30,-30,-40,-50,-50,
-    -50,-50,-50,-40,-40,-40,-50,-50,
-    -30,-30,-30,-30,-30,-30,-30,-30,
-    -10,-10,-20,-20,-20,-20,-20,-10,
-     20, 20,  0,  0,  0,  0,  0, 20,
-     30, 20, 10,  0,  0,  0, 10, 20,
-]
-
-PIECE_TABLES: dict[PieceType, list[int]] = {
-    PieceType.PAWN:   PAWN_TABLE,
-    PieceType.KNIGHT: KNIGHT_TABLE,
-    PieceType.BISHOP: BISHOP_TABLE,
-    PieceType.ROOK:   ROOK_TABLE,
-    PieceType.QUEEN:  QUEEN_TABLE,
-    PieceType.KING:   KING_TABLE,
-}
-
+from config import PIECE_VALUES, PIECE_TABLES, PIECE_TABLES_EG, SIGMA, CONTROL_OWN_HALF, CONTROL_OPPONENT_HALF, KING_DANGER, INITIATIVE_VAL, ENDGAME_PHASE_THRESHOLD, MAX_PHASE
+from abbott import is_endgame
 
 class Evaluator:
     """
@@ -148,17 +64,44 @@ class Evaluator:
         Complexity:
             O(P*D).
         """
+        return self.evaluate_and_is_endgame(board)[0]
+
+    def evaluate_and_is_endgame(self, board: Board):
+        """
+        Score a position from White's perspective.
+
+        Args:
+            board (Board): Board position being queried or updated.
+
+        Returns:
+            int: centipawn integer.
+            bool: whether we are in endgame phase.
+
+        Complexity:
+            O(P*D).
+        """
         score = 0
-        score += self._material(board)
+
+        white_mat, black_mat = self._material(board)
+        score += white_mat - black_mat
+
         # score += self._control(board)
-        score += self._king_safety(board) # TODO turn off in late game
+
+        count_white_pawns = board.bitboards[Colour.WHITE, PieceType.PAWN].bit_count()
+        count_black_pawns = board.bitboards[Colour.BLACK, PieceType.PAWN].bit_count()
+        phase_value = white_mat + black_mat - (count_white_pawns + count_black_pawns) * 100
+        is_endgame = phase_value > ENDGAME_PHASE_THRESHOLD
+        if is_endgame:
+            score += self._king_safety(board)
+        
         score += self._initiative(board)
-        score += self._piece_square(board)
+        
+        score += self._piece_square(board, phase_value)
 
         if self.isVary:
-            score += random.randint(-5, 5)
+            score += random.randint(-SIGMA, SIGMA)
 
-        return score
+        return score, is_endgame
 
     def _material(self, board: Board) -> int:
         """
@@ -168,20 +111,25 @@ class Evaluator:
             board (Board): Board position being queried or updated.
 
         Returns:
-            int: material score.
+            int: material score of white.
+            int: material score of black.
 
         Complexity:
             O(P).
         """
-        score = 0
+        score_white = 0
+        score_black = 0
         for colour in Colour:
             for piece_type in PieceType:
                 if piece_type == PieceType.KING:
                     continue
                 value = PIECE_VALUES.get(piece_type, 0)
                 bb = board.bitboards[colour, piece_type]
-                score += value * bb.bit_count() * (-1 if colour == Colour.BLACK else 1)
-        return score
+                if colour == Colour.WHITE:
+                    score_white += value * bb.bit_count()
+                if colour == Colour.BLACK:
+                    score_black += value * bb.bit_count()
+        return score_white, score_black
 
     def  _control(self, board: Board) -> int:
         """
@@ -212,16 +160,16 @@ class Evaluator:
         # White control
         for target, count in white_attacks.items():
             if self._is_other_side(board, Colour.WHITE, target):
-                score += 10# * count
+                score += CONTROL_OPPONENT_HALF# * count
             else:
-                score += 5# * count
+                score += CONTROL_OWN_HALF# * count
 
         # Black control
         for target, count in black_attacks.items():
             if self._is_other_side(board, Colour.BLACK, target):
-                score -= 10# * count
+                score -= CONTROL_OPPONENT_HALF# * count
             else:
-                score -= 5# * count
+                score -= CONTROL_OWN_HALF# * count
 
         return score
 
@@ -259,7 +207,7 @@ class Evaluator:
                     continue                      # no pressure: skip the defender count
                 defenders = self._rules.count_attackers(board, idx, king_colour)
                 if attackers > defenders:
-                    score += sign * (attackers - defenders) * 40
+                    score += sign * (attackers - defenders) * KING_DANGER
 
         return score
 
@@ -322,16 +270,15 @@ class Evaluator:
             O(1).
         """
 
-        INITIATIVE_VAL = 10
-
         return INITIATIVE_VAL if board.turn == Colour.WHITE else -1 * INITIATIVE_VAL
     
-    def _piece_square(self, board: Board) -> int:
+    def _piece_square(self, board: Board, game_phase: int = MAX_PHASE) -> int:
         """
         Apply 8x8 piece-square tables.
 
         Args:
             board (Board): Board position being queried or updated.
+            game_phase (int): Material value left representing what phase of the game we are in
 
         Returns:
             int: positional score (zero off 8x8).
@@ -341,6 +288,11 @@ class Evaluator:
         """
         if board.ranks != 8 or board.files != 8:
             return 0
+
+        if is_endgame:
+            PST = PIECE_TABLES_EG
+        else:
+            PST = PIECE_TABLES
 
         # Positions are centered so the opposing king is in the e file
         white_king = board.find_piece(PieceType.KING, Colour.WHITE)
@@ -352,16 +304,21 @@ class Evaluator:
 
         score = 0
         for piece_type, table in PIECE_TABLES.items():
+            eg_table = PIECE_TABLES_EG[piece_type]
             bb = board.bitboards[(Colour.WHITE, piece_type)]
             while bb:
                 low = bb & -bb # lowest set bit
                 rank, file = divmod(low.bit_length() - 1, 8) # finds the index of the lowest bit, then extracts rank/file
-                score += table[(7 - rank) * 8 + (file + shift_white) % 8] # table look up to account for flipped board in piece square tables
+                pst_score = table[(7 - rank) * 8 + (file + shift_white) % 8] # table look up to account for flipped board in piece square tables
+                eg_pst_score = eg_table[(7 - rank) * 8 + (file + shift_white) % 8]
+                score += (pst_score * game_phase // MAX_PHASE + eg_pst_score * (MAX_PHASE - game_phase) // MAX_PHASE) # linear combination of the normal and endgame PSTs
                 bb ^= low # clears lowest bit
             bb = board.bitboards[(Colour.BLACK, piece_type)]
             while bb:
                 low = bb & -bb
                 rank, file = divmod(low.bit_length() - 1, 8)
-                score -= table[rank * 8 + (file + shift_black) % 8]
+                pst_score = table[rank * 8 + (file + shift_black) % 8]
+                eg_pst_score = eg_table[rank * 8 + (file + shift_black) % 8]
+                score -= (pst_score * game_phase // MAX_PHASE + eg_pst_score * (MAX_PHASE - game_phase) // MAX_PHASE)
                 bb ^= low
         return score

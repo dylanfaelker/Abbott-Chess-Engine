@@ -160,21 +160,35 @@ The idea is that having the next move is usually worth something, especially in 
 ### 4. Piece-Square Tables [^pst]
 
 On standard `8x8` boards, Abbott also uses **piece-square tables**.
-- The table values are implemented in [`engine/evaluate.py`](engine/evaluate.py#L95).
+- The table values are implemented in [`engine/config.py`](engine/config.py#L91).
 
 These are pre-written lookup tables that reward good placement for each piece type. For example:
 
 - pawns are encouraged to advance sensibly,
 - knights are rewarded for central activity,
-- kings are guided toward safer squares.
+- kings are guided toward safer squares in the middlegame, but more centrally in the endgame.
 
-Because Infinity Chess wraps horizontally, the tables are shifted so they stay aligned with the enemy king's file. A "center of the board" does not exist in Infinity Chess. It could be the `d` and `e` files, or it could be the `a` and `h` files, depending on how the game unfolds. The shift makes the positional bonuses more relevant to the wrapped board geometry.
+There is a second set of PSTs for endgames [^endgame]. These values put more emphasis on pushing pawns and encourage the king to play centrally. The final scores derived from the PSTs is a linear interpolation of the two sets of PSTs depending on the game phase [^gamephase].
 
-### 5. Small Random Variation
+Because Infinity Chess wraps horizontally, the tables are shifted so they stay aligned with the enemy king's file. A "center of the board" does not exist in Infinity Chess. It could be the `d` and `e` files, or it could be the `a` and `h` files, depending on how the game unfolds. The shift makes the positional bonuses more relevant to the wrapped board geometry. Thanks to this feature, we can also include some Rule of the Square [^ruleofthesquare] considerations to our endgame pawn PST. When the opponent king is guarenteed to be our of the square, we give a 20cp boost to the pawn.
+
+### 5. Game Phase [^gamephase]
+
+The objective of the engine will change through out the game depending on what phase the game is considered to be in. 
+
+The game phase is derived by the total value of non-pawn pieces on the board. Thus the max game phase value is 6400 and the minimum is 0.
+
+The endgame [^endgame] is played much differently than opening/middlegame. Because of this, its important to give the engine the ability to detect when its in the endgame and adjust its computation accordingly. The endgame cutoff point is at a game phase score of 2800. Being in the endgame changes a few things for us.
+- King safety is no longer considered in the evaluation function.
+    - You want the king to be active in the endgame so we don't want to encourage hiding away.
+- Delta pruning is turned off in the search of the endgame.
+    - Insufficient material becomes an important part of the game at this point. Dont want to be blind to that.
+- The PSTs also adjust continuously based on the game phase. 
+
+### 6. Small Random Variation
 
 The main engine can optionally add a very small random value to the evaluation. This creates a little variety so the engine does not always choose the exact same move in equal positions.
     - The random value ranges from -5 to 5 centipawns.
-
 
 # Things that didn't work out
 
@@ -192,6 +206,8 @@ Why not: In 100 games of v2.3c (with board control) vs v2.3 (regular) with a 1 s
 [^centipawn]: [Centipawns](https://www.chessprogramming.org/Centipawns)
 [^classical]: [Classical Approach](https://www.chessprogramming.org/Classical_Approach)
 [^deltapruning]: [Delta Pruning](https://chessprogramming.org/Delta_Pruning)
+[^endgame]: [Endgame](https://chessprogramming.org/Endgame)
+[^gamephase]: [Game Phases](https://chessprogramming.org/Game_Phases)
 [^hashmove]: [Hash Move](https://www.chessprogramming.org/Hash_Move)
 [^hce]: [Evaluation](https://www.chessprogramming.org/Evaluation)
 [^horizon]: [Horizon Effect](https://www.chessprogramming.org/Horizon_Effect)
@@ -206,5 +222,6 @@ Why not: In 100 games of v2.3c (with board control) vs v2.3 (regular) with a 1 s
 [^pseudo]: [Pseudo-Legal Move](https://www.chessprogramming.org/Pseudo-Legal_Move)
 [^pst]: [Piece-Square Tables](https://www.chessprogramming.org/Piece-Square_Tables)
 [^quiescence]: [Quiescence Search](https://www.chessprogramming.org/Quiescence_Search)
+[^ruleofthesquare]: [Rule of the Square](https://chessprogramming.org/Rule_of_the_Square)
 [^tt]: [Transposition Table](https://www.chessprogramming.org/Transposition_Table)
 [^zobrist]: [Zobrist Hashing](https://www.chessprogramming.org/Zobrist_Hashing)

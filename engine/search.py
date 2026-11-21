@@ -7,15 +7,25 @@ L = legal move count, M = candidate moves, and A = king-safety check cost.
 """
 
 from __future__ import annotations
+from pathlib import Path
+import sys
+
+_ENGINE_DIR = str(Path(__file__).resolve().parent)
+if sys.path and sys.path[0] != _ENGINE_DIR:
+    if _ENGINE_DIR in sys.path:
+        sys.path.remove(_ENGINE_DIR)
+    sys.path.insert(0, _ENGINE_DIR)
+    sys.modules.pop("evaluate", None)
+
 import time
 from infinity_chess.board import Board, _pre_promotion_masks
 from infinity_chess.move import Move, MoveFlag, CAPTURE_FLAGS, QUIESCENCE_FLAGS
 from infinity_chess.move_generator import MoveGenerator
-from engine.evaluate import Evaluator, PIECE_VALUES
+from evaluate import Evaluator, PIECE_VALUES
 from infinity_chess.pieces import Colour, PieceType
 from infinity_chess.rules import InfinityChessRules, RuleSet
-
-MATE_SCORE = 100_000_000
+from config import MATE_SCORE, DELTA_MARGIN
+from abbott import is_endgame
 
 TT_EXACT, TT_LOWER, TT_UPPER = 0, 1, 2
 
@@ -299,26 +309,25 @@ class Search:
         if self._check_deadline and time.perf_counter() >= self.deadline:
             raise _SearchTimeout
 
-        # stand-pat
-        score = self.evaluator.evaluate(board)
+        score, is_endgame = self.evaluator.evaluate_and_is_endgame(board) # stand-pat
         if board.turn == Colour.BLACK:
             score = -score
 
-        # TODO turn off in late game
         # Delta pruning
-        delta = 0
-        for pt in (PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT, PieceType.PAWN):
-            if (board.bitboards[board.turn.opponent(), pt] != 0): 
-                delta = PIECE_VALUES[pt]
-                break
+        if is_endgame:
+            delta = 0
+            for pt in (PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT, PieceType.PAWN):
+                if (board.bitboards[board.turn.opponent(), pt] != 0): 
+                    delta = PIECE_VALUES[pt]
+                    break
 
-        white_promo_mask, black_promo_mask = _pre_promotion_masks(board.ranks, board.files)
-        promo_mask = white_promo_mask if board.turn == Colour.WHITE else black_promo_mask
-        if board.bitboards[board.turn, PieceType.PAWN] & promo_mask:
-            delta += PIECE_VALUES[PieceType.QUEEN] - PIECE_VALUES[PieceType.PAWN]
-            
-        if score + delta + 200 < alpha: # DELTA_MARGIN is 200
-            return alpha
+            white_promo_mask, black_promo_mask = _pre_promotion_masks(board.ranks, board.files)
+            promo_mask = white_promo_mask if board.turn == Colour.WHITE else black_promo_mask
+            if board.bitboards[board.turn, PieceType.PAWN] & promo_mask:
+                delta += PIECE_VALUES[PieceType.QUEEN] - PIECE_VALUES[PieceType.PAWN]
+
+            if score + delta + DELTA_MARGIN < alpha:
+                return alpha
 
         if score >= beta:  return beta
         alpha = max(alpha, score)
