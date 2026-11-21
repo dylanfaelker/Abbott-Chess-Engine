@@ -22,6 +22,7 @@ from evaluate import Evaluator, PIECE_VALUES
 from infinity_chess.pieces import Colour, PieceType
 from infinity_chess.rules import InfinityChessRules, RuleSet
 from config import MATE_SCORE, DELTA_MARGIN
+from abbott import is_endgame
 
 TT_EXACT, TT_LOWER, TT_UPPER = 0, 1, 2
 
@@ -309,21 +310,21 @@ class Search:
         if board.turn == Colour.BLACK:
             score = -score
 
-        # TODO turn off in late game
         # Delta pruning
-        delta = 0
-        for pt in (PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT, PieceType.PAWN):
-            if (board.bitboards[board.turn.opponent(), pt] != 0): 
-                delta = PIECE_VALUES[pt]
-                break
+        if not is_endgame(board):
+            delta = 0
+            for pt in (PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT, PieceType.PAWN):
+                if (board.bitboards[board.turn.opponent(), pt] != 0): 
+                    delta = PIECE_VALUES[pt]
+                    break
 
-        white_promo_mask, black_promo_mask = _pre_promotion_masks(board.ranks, board.files)
-        promo_mask = white_promo_mask if board.turn == Colour.WHITE else black_promo_mask
-        if board.bitboards[board.turn, PieceType.PAWN] & promo_mask:
-            delta += PIECE_VALUES[PieceType.QUEEN] - PIECE_VALUES[PieceType.PAWN]
+            white_promo_mask, black_promo_mask = _pre_promotion_masks(board.ranks, board.files)
+            promo_mask = white_promo_mask if board.turn == Colour.WHITE else black_promo_mask
+            if board.bitboards[board.turn, PieceType.PAWN] & promo_mask:
+                delta += PIECE_VALUES[PieceType.QUEEN] - PIECE_VALUES[PieceType.PAWN]
 
-        if score + delta + DELTA_MARGIN < alpha:
-            return alpha
+            if score + delta + DELTA_MARGIN < alpha:
+                return alpha
 
         if score >= beta:  return beta
         alpha = max(alpha, score)

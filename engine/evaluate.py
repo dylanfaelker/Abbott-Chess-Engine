@@ -18,7 +18,7 @@ from infinity_chess.pieces import Piece, PieceType, Colour
 from infinity_chess.rules import InfinityChessRules
 from infinity_chess.geometry import geometry
 from config import PIECE_VALUES, PIECE_TABLES, SIGMA, CONTROL_OWN_HALF, CONTROL_OPPONENT_HALF, KING_DANGER, INITIATIVE_VAL
-
+from abbott import is_endgame
 
 class Evaluator:
     """
@@ -67,7 +67,8 @@ class Evaluator:
         score = 0
         score += self._material(board)
         # score += self._control(board)
-        score += self._king_safety(board)
+        if not is_endgame(board):
+            score += self._king_safety(board)
         score += self._initiative(board)
         score += self._piece_square(board)
 
