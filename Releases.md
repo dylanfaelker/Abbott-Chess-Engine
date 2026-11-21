@@ -1,3 +1,6 @@
+# V2.5
+- Delta pruning
+
 # V2.4
 - Adding back King Safety with increased efficiency
     - Set to 40 cp per extra attacker near king
