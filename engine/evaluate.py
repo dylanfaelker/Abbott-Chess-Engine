@@ -17,7 +17,7 @@ from infinity_chess.move import Square
 from infinity_chess.pieces import Piece, PieceType, Colour
 from infinity_chess.rules import InfinityChessRules
 from infinity_chess.geometry import geometry
-from config import PIECE_VALUES, PIECE_TABLES, SIGMA, CONTROL_OWN_HALF, CONTROL_OPPONENT_HALF, KING_DANGER, INITIATIVE_VAL, ENDGAME_MATERIAL_THRESHOLD
+from config import PIECE_VALUES, PIECE_TABLES, PIECE_TABLES_EG, SIGMA, CONTROL_OWN_HALF, CONTROL_OPPONENT_HALF, KING_DANGER, INITIATIVE_VAL, ENDGAME_MATERIAL_THRESHOLD
 from abbott import is_endgame
 
 class Evaluator:
@@ -64,9 +64,9 @@ class Evaluator:
         Complexity:
             O(P*D).
         """
-        return self.evaluate_and_materials(board)[0]
+        return self.evaluate_and_is_endgame(board)[0]
 
-    def evaluate_and_materials(self, board: Board):
+    def evaluate_and_is_endgame(self, board: Board):
         """
         Score a position from White's perspective.
 
@@ -75,8 +75,7 @@ class Evaluator:
 
         Returns:
             int: centipawn integer.
-            int: whites material count.
-            int: blacks material count.
+            bool: whether we are in endgame phase.
 
         Complexity:
             O(P*D).
@@ -87,15 +86,16 @@ class Evaluator:
         # score += self._control(board)
         count_white_pawns = board.bitboards[Colour.WHITE, PieceType.PAWN].bit_count()
         count_black_pawns = board.bitboards[Colour.BLACK, PieceType.PAWN].bit_count()
-        if white_mat + black_mat - (count_white_pawns + count_black_pawns) * 100 > ENDGAME_MATERIAL_THRESHOLD:
+        is_endgame = white_mat + black_mat - (count_white_pawns + count_black_pawns) * 100 > ENDGAME_MATERIAL_THRESHOLD
+        if is_endgame:
             score += self._king_safety(board)
         score += self._initiative(board)
-        score += self._piece_square(board)
+        score += self._piece_square(board, is_endgame)
 
         if self.isVary:
             score += random.randint(-SIGMA, SIGMA)
 
-        return score, white_mat, black_mat
+        return score, is_endgame
 
     def _material(self, board: Board) -> int:
         """
@@ -266,7 +266,7 @@ class Evaluator:
 
         return INITIATIVE_VAL if board.turn == Colour.WHITE else -1 * INITIATIVE_VAL
     
-    def _piece_square(self, board: Board) -> int:
+    def _piece_square(self, board: Board, is_endgame: bool = False) -> int:
         """
         Apply 8x8 piece-square tables.
 
@@ -281,6 +281,11 @@ class Evaluator:
         """
         if board.ranks != 8 or board.files != 8:
             return 0
+
+        if is_endgame:
+            PST = PIECE_TABLES_EG
+        else:
+            PST = PIECE_TABLES
 
         # Positions are centered so the opposing king is in the e file
         white_king = board.find_piece(PieceType.KING, Colour.WHITE)
