@@ -1,3 +1,9 @@
+# V2.6
+- Endgame detection
+    - Deactivates king safety and delta pruning
+- Endgame PSTs
+    - Linearly interpolated PST scores base on game phase
+
 # V2.5
 - Delta pruning
 
