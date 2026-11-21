@@ -16,6 +16,7 @@ from infinity_chess.board import Board
 from infinity_chess.move import Square
 from infinity_chess.pieces import Piece, PieceType, Colour
 from infinity_chess.rules import InfinityChessRules
+from infinity_chess.geometry import geometry
 
 
 PIECE_VALUES: dict[PieceType, int] = {
@@ -132,6 +133,7 @@ class Evaluator:
             O(1).
         """
         self.isVary = isVary
+        self._rules = InfinityChessRules() # TODO make this an input
 
     def evaluate(self, board: Board) -> int:
         """
@@ -149,6 +151,7 @@ class Evaluator:
         score = 0
         score += self._material(board)
         # score += self._control(board)
+        score += self._king_safety(board)
         score += self._initiative(board)
         score += self._piece_square(board)
 
@@ -182,7 +185,7 @@ class Evaluator:
 
     def  _control(self, board: Board) -> int:
         """
-        Score attacked squares and king pressure.
+        Score attacked squares.
 
         Args:
             board (Board): Board position being queried or updated.
@@ -193,18 +196,17 @@ class Evaluator:
         Complexity:
             O(P*D).
         """
-        rules = InfinityChessRules()
 
         score = 0
 
         white_attacks: Counter[Square] = Counter()
         for sq, piece in board.pieces_for(Colour.WHITE):
-            for target in rules.attacks_from(board, sq):
+            for target in self._rules.attacks_from(board, sq):
                 white_attacks[target] += 1
 
         black_attacks: Counter[Square] = Counter()
         for sq, piece in board.pieces_for(Colour.BLACK):
-            for target in rules.attacks_from(board, sq):
+            for target in self._rules.attacks_from(board, sq):
                 black_attacks[target] += 1
 
         # White control
@@ -221,22 +223,43 @@ class Evaluator:
             else:
                 score -= 5# * count
 
-        # White king danger
-        white_king_sq = board.find_piece(PieceType.KING, Colour.WHITE)
-        if white_king_sq is not None:
-            for target in self._king_ring(board, white_king_sq, rules):
-                pressure = black_attacks[target] - white_attacks[target]
-                if pressure > 0:
-                    score -= pressure * 20
+        return score
 
 
-        # Black king danger
-        black_king_sq = board.find_piece(PieceType.KING, Colour.BLACK)
-        if black_king_sq is not None:
-            for target in self._king_ring(board, black_king_sq, rules):
-                pressure = white_attacks[target] - black_attacks[target]
-                if pressure > 0:
-                    score += pressure * 20
+    def _king_safety(self, board: Board) -> int:
+        """
+        Score king pressure from White's perspective.
+
+        For each square adjacent to a king, penalise 20 per enemy
+        attacker in excess of friendly defenders.
+
+        Args:
+            board (Board): Board position being queried or updated.
+
+        Returns:
+            int: control score.
+
+        Complexity:
+            O(1): 16 ring squares, each a fixed number of table lookups,
+            independent of piece count.
+        """
+        g = geometry(board.ranks, board.files, self._rules.WRAPS)
+        score = 0
+
+        for king_colour, sign in ((Colour.WHITE, -1), (Colour.BLACK, 1)):
+            king_bb = board.bitboards[(king_colour, PieceType.KING)]
+            if not king_bb:
+                continue
+            king_idx = (king_bb & -king_bb).bit_length() - 1
+            enemy = king_colour.opponent()
+
+            for idx in g.king[king_idx]:
+                attackers = self._rules.count_attackers(board, idx, enemy)
+                if attackers == 0:
+                    continue                      # no pressure: skip the defender count
+                defenders = self._rules.count_attackers(board, idx, king_colour)
+                if attackers > defenders:
+                    score += sign * (attackers - defenders) * 40
 
         return score
 

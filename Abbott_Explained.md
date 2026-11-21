@@ -63,7 +63,7 @@ Alpha-beta pruning becomes much stronger when the best moves are searched first,
 3. **Killer moves** are tried early if they previously caused a cutoff at the same search depth.[^killer]
     - Score: 9,000
 4. **Promotions** are also pushed higher in the order.
-    - Score: 8,000
+    - Score: 8,000 for Queen, 7999 for Rook, 7998 for Bishop or Knight
 
 Better move ordering means more cutoffs, and more cutoffs mean faster searchs.
 
@@ -97,6 +97,10 @@ The search also checks whether the game is already over:
 
 This lets Abbott treat mate as more important than ordinary material or positional advantages.
 
+### 8. Lazy Legal Checking
+
+Instead of creating a list of legal moves at each node, create a list of pseudo-legal moves. Only check the legality of a move when actually examining the child node after making the move. With the use of move ordering and alpha-beta pruning, most moves will be discarded. This saves the cost of checking each of those other moves for king safety.
+
 ## Evaluation
 
 Abbott's evaluator is a **hand-crafted evaluation** function.[^hce] It does not learn weights from data. Instead, the scoring rules are written explicitly in code.
@@ -128,22 +132,7 @@ Abbott uses these piece values: [^centipawn]
 
 One notable Infinity Chess choice is that the **bishop is valued at 400 instead of 300**. Because of horizontal wrapping, bishops can become much more slippery and dangerous than in normal chess.
 
-### 2. Board Control
-
-Abbott builds an **attack map** for both sides using **pseudo-legal moves**.[^pseudo]
-
-It then rewards square control:
-
-- squares on your own half are worth less,
-    - 5 centipawns
-- squares on the opponent's half are worth more.
-    - 10 centipawns
-
-These are only counted for each individual square being attacked. There is no extra points for having a two pieces attacking the same square.
-
-This encourages active play and forward pressure rather than passive piece placement.
-
-### 3. King Safety [^kingsafety]
+### 2. King Safety [^kingsafety]
 
 King safety is evaluated using the squares around each king.
 
@@ -151,20 +140,20 @@ For each square around the king:
 
 - the engine compares enemy attackers to friendly defenders,
 - if the enemy has more pressure, the position is penalized.
-    - 20 centipawns for each extra attacker. 
+    - 40 centipawns for each extra attacker.
 - There is no bonus for overly defended squares.
     - The best score defensively is 0.
 
 This means the engine is not only counting direct threats to the king itself. It is also measuring how weak the surrounding shelter has become.
 
-### 4. Initiative
+### 3. Initiative
 
 Abbott gives a small bonus to the side to move. This is a simple **initiative** term.
 - This is worth 10 centipawns
 
 The idea is that having the next move is usually worth something, especially in active or tactical positions.
 
-### 5. Piece-Square Tables [^pst]
+### 4. Piece-Square Tables [^pst]
 
 On standard `8x8` boards, Abbott also uses **piece-square tables**.
 - The table values are implemented in [`engine/evaluate.py`](engine/evaluate.py#L95).
@@ -177,11 +166,21 @@ These are pre-written lookup tables that reward good placement for each piece ty
 
 Because Infinity Chess wraps horizontally, the tables are shifted so they stay aligned with the enemy king's file. A "center of the board" does not exist in Infinity Chess. It could be the `d` and `e` files, or it could be the `a` and `h` files, depending on how the game unfolds. The shift makes the positional bonuses more relevant to the wrapped board geometry.
 
-### 6. Small Random Variation
+### 5. Small Random Variation
 
 The main engine can optionally add a very small random value to the evaluation. This creates a little variety so the engine does not always choose the exact same move in equal positions.
     - The random value ranges from -5 to 5 centipawns.
 
+
+# Things that didn't work out
+
+### 1. Board Control
+
+Idea: Encourage active play and forward pressure rather than passive piece placement.
+
+Abbott builds an **attack map** for both sides using **pseudo-legal moves**.[^pseudo] It then rewards square control giving 5cp for each square on your own half and 10cp for each square on the opponent's half. These are only counted for each individual square being attacked. There is no extra points for having a two pieces attacking the same square.
+
+Why not: In 100 games of v2.3c (with board control) vs v2.3 (regular) with a 1 second move timer, v2.3c scored 27.5% with 17 wins and 62 losses. This seemed to be due to a reduction in speed as nodes/s was under half of v2.3 and average depth was 0.46 below v2.3. When played with set depth of 3 (which would thus ignore the speed cost), v2.3c does perform better, scoring 62.5% with 52 wins and 27 losses. This suggests a better/more efficient implementation may be able to provide some benefit.
 
 ---
 
