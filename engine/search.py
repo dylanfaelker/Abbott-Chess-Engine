@@ -24,7 +24,7 @@ from infinity_chess.move_generator import MoveGenerator
 from evaluate import Evaluator, PIECE_VALUES
 from infinity_chess.pieces import Colour, PieceType
 from infinity_chess.rules import InfinityChessRules, RuleSet
-from config import MATE_SCORE, DELTA_MARGIN
+from config import MATE_SCORE, DELTA_MARGIN, HISTORY_MAX, PROMOTION_HUERISTIC_MAX, HASH_MOVE_SCORE, MVV_LVA_BASE, KILLER_MOVE_SCORE
 from abbott import is_endgame
 
 TT_EXACT, TT_LOWER, TT_UPPER = 0, 1, 2
@@ -77,6 +77,8 @@ class Search:
         self.evaluator = Evaluator(isVary)
         self.transposition_table: dict[int, tuple[int, int, int, Move | None]] = {}
         self.killer_moves: list[list] = [[None, None] for _ in range(MAX_PLY)]
+        n = board.ranks * board.files
+        self.history = [0] * (2 * n * n) # # [colour][from][to], flattened
         self.nodes_searched = 0
         self.depth_reached = 0                # deepest iteration that completed (set by find_best_move)
         self.deadline: float | None = None    # time.perf_counter() timestamp; None = no time limit
@@ -248,6 +250,7 @@ class Search:
                 return 0
             
         colour, legal_found = board.turn, False
+        quiets: list[Move] = []
         pseudo_moves = gen.pseudo_legal_moves()
         for move in self._ordered_moves(board, ply, pseudo_moves):
             undo = board.make_move(move)
@@ -265,10 +268,21 @@ class Search:
             alpha = max(alpha, score)
 
             if alpha >= beta: # beta-cutoff -> killer move
+
                 if move.flag not in CAPTURE_FLAGS: # killer moves are only "quiet" moves
                     self.killer_moves[ply][1] = self.killer_moves[ply][0]
                     self.killer_moves[ply][0] = move
+
+                if move.flag not in QUIESCENCE_FLAGS:              # truly quiet: no capture, no promotion
+                    bonus = min(32 * depth * depth, 1200) # 32 scales the memory length (smaller = longer memory)
+                    self._update_history(self._hist_index(board, move), bonus)
+                    for q in quiets:                               # tried first, failed to cut off
+                        self._update_history(self._hist_index(board, q), -bonus)
+                
                 break
+
+            if move.flag not in QUIESCENCE_FLAGS:
+                quiets.append(move)
 
         if not legal_found: # game over
             return -(MATE_SCORE - ply) if self.rules.is_in_check(board, colour) else 0
@@ -409,7 +423,7 @@ class Search:
 
             # Best first Hueristic - found via iterative deepening
             if move == tt_move:
-                score = 100_000
+                score = HASH_MOVE_SCORE
 
             # MVV-LVA Hueristic
             elif move.flag in CAPTURE_FLAGS:
@@ -418,21 +432,38 @@ class Search:
                 attacker = board.get(move.from_sq)
                 v_val = ORDER_VALUES.get(victim.piece_type, 0)   if victim   else 0
                 a_val = ORDER_VALUES.get(attacker.piece_type, 0) if attacker else 0
-                score = 10_000 + 10 * v_val - a_val # max 18_900, min 10_100
+                score = MVV_LVA_BASE + 10 * v_val - a_val # max 18_900, min 10_000
 
             # Killer Hueristic
             elif move in self.killer_moves[ply]:
-                score = 9_000
+                score = KILLER_MOVE_SCORE
 
+            # Promotion Hueristics
             elif move.flag in (MoveFlag.PROMOTION, MoveFlag.PROMOTION_CAPTURE):
                 if move.promotion_piece.lower() == "queen":
-                    score = 8_000
+                    score = PROMOTION_HUERISTIC_MAX
                 elif move.promotion_piece.lower() == "rook":
-                    score = 7_999
+                    score = PROMOTION_HUERISTIC_MAX - 1
+                elif move.promotion_piece.lower() == "bishop":
+                    score = PROMOTION_HUERISTIC_MAX - 2
                 else:
-                    score = 7_998
+                    score = PROMOTION_HUERISTIC_MAX - 3
+
+            # History Hueristic
+            else:
+                self.history[self._hist_index(board, move)]
 
             scored.append((score, move))
 
         scored.sort(key=lambda x: x[0], reverse=True)
         return [m for s, m in scored]
+
+    def _hist_index(self, board: Board, move: Move) -> int:
+        n = board.ranks * board.files
+        return ((board.turn is Colour.BLACK) * n + board._index(move.from_sq)) * n + board._index(move.to_sq)
+
+    def _update_history(self, idx: int, bonus: int) -> None:
+        h = self.history[idx]
+
+        # exponential moving average with scaling decay rate keeps it bounded by [-MAX, MAX]
+        self.history[idx] = h + bonus - h * abs(bonus) // HISTORY_MAX # h' = h x (1 - |bonus| / MAX) + bonus
