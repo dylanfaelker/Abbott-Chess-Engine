@@ -289,11 +289,6 @@ class Evaluator:
         if board.ranks != 8 or board.files != 8:
             return 0
 
-        if is_endgame:
-            PST = PIECE_TABLES_EG
-        else:
-            PST = PIECE_TABLES
-
         # Positions are centered so the opposing king is in the e file
         white_king = board.find_piece(PieceType.KING, Colour.WHITE)
         black_king = board.find_piece(PieceType.KING, Colour.BLACK)
