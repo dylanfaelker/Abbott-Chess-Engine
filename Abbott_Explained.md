@@ -59,13 +59,18 @@ Alpha-beta pruning becomes much stronger when the best moves are searched first,
     - Score: 100,000
 2. **Captures** are sorted using **MVV-LVA** ("Most Valuable Victim, Least Valuable Attacker").[^mvvlva]
     - Score: 10,000 + 10 * VICTIM_VALUE - ATTACKER_VALUE
-    - Range: [18,900, 10,100]
-3. **Killer moves** are tried early if they previously caused a cutoff at the same search depth.[^killer]
+    - Range: [18,900, 10,000]
+3. **Mate killer**: Killer moves due to mates are prioritised.[^matekiller]
+4. Other **Killer moves** are tried early if they previously caused a cutoff at the same search depth.[^killer]
     - Score: 9,000
-4. **Promotions** are also pushed higher in the order.
+5. **Promotions** are also pushed higher in the order.
     - Score: 8,000 for Queen, 7999 for Rook, 7998 for Bishop or Knight
+6. Remaining quiet moves are sorted using the **History Hueristic**. This works much like a more complex depth agnostic killer move hueristic. The implementation is done using butterfly boards and a squared depth bonus. The score is limited to a max of 7000 through an exponential moving average that limits the memory of the history.[^historyhueristic][^butterflyboard]
+7. The same remaining quiet moves are also affected by the **Static Advancement Hueristic**. This works to add a final level of discrete-ness to the move ordering score and break ties. It gives a bonus equal to the rank of the target square relative to your side of the board. Thus the max is 7, min is 0. This is small enough compared to the bonus scaling of 32*depth<sup>2</sup> used in the History Hueristic that it won't dramatically affect any of the other ordering techniques.
 
 Better move ordering means more cutoffs, and more cutoffs mean faster searchs.
+
+Move ordering for the root node needs to work a little differently. Because beta starts out at infinity, there is no chance for a beta-cutoff (and thus any type of killer moves or history heuristic). Instead, we rely on the previous iterations scores for move ordering. Due to the nature of alpha-beta pruning, these scores from the previous iteration are only upper bound, so this method isn't perfect by any means. But it is able to provide some estimate of the optimal move ordering.
 
 ### 5. Transposition Table [^tt]
 
@@ -203,18 +208,21 @@ Why not: In 100 games of v2.3c (with board control) vs v2.3 (regular) with a 1 s
 ---
 
 [^alphabeta]: [Alpha-Beta](https://www.chessprogramming.org/Alpha-Beta)
+[^butterflyboard]: [Butterfly Boards](https://chessprogramming.org/Butterfly_Boards)
 [^centipawn]: [Centipawns](https://www.chessprogramming.org/Centipawns)
 [^classical]: [Classical Approach](https://www.chessprogramming.org/Classical_Approach)
 [^deltapruning]: [Delta Pruning](https://chessprogramming.org/Delta_Pruning)
 [^endgame]: [Endgame](https://chessprogramming.org/Endgame)
 [^gamephase]: [Game Phases](https://chessprogramming.org/Game_Phases)
 [^hashmove]: [Hash Move](https://www.chessprogramming.org/Hash_Move)
+[^historyhueristic]: [History Hueristic](https://chessprogramming.org/History_Heuristic)
 [^hce]: [Evaluation](https://www.chessprogramming.org/Evaluation)
 [^horizon]: [Horizon Effect](https://www.chessprogramming.org/Horizon_Effect)
 [^iterdeep]: [Iterative Deepening](https://www.chessprogramming.org/Iterative_Deepening)
 [^killer]: [Killer Heuristic](https://www.chessprogramming.org/Killer_Heuristic)
 [^kingsafety]: [King Safety](https://www.chessprogramming.org/King_Safety)
 [^legal]: [Legal Move](https://www.chessprogramming.org/Legal_Move)
+[^matekiller]: [Mate Killer](https://chessprogramming.org/Mate_Killers)
 [^material]: [Material](https://www.chessprogramming.org/Material)
 [^moveordering]: [Move Ordering](https://www.chessprogramming.org/Move_Ordering)
 [^mvvlva]: [MVV-LVA](https://www.chessprogramming.org/MVV-LVA)

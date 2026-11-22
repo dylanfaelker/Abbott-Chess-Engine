@@ -1,3 +1,9 @@
+# V2.7
+- History hueristic
+- Mate Killer Move Hueristic
+- Advancement Hueristic
+- Root node move ordering
+
 # V2.6
 - Endgame detection
     - Deactivates king safety and delta pruning
