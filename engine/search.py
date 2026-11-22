@@ -86,6 +86,7 @@ class Search:
         self._check_deadline = False          # off during depth 1 so a move is always available
         self.isVary = isVary
         self._root_best: tuple[Move | None, float] = (None, -INF)
+        self._root_scores: dict[Move, int] = {}
 
     def find_best_move(self, depth: int, time_limit: float | None = None) -> tuple[Move | None, int]:
         """
@@ -178,6 +179,11 @@ class Search:
         best_score = -INF
         alpha, beta = -INF, INF
 
+        ordered = self._ordered_moves(self.board, 0)
+        if self._root_scores:
+            ordered.sort(key=lambda m: self._root_scores.get(m, -INF), reverse=True)
+
+        scores: dict[Move, int] = {}
         for move in self._ordered_moves(self.board, 0):
             undo = self.board.make_move(move)
             try:
@@ -185,11 +191,14 @@ class Search:
             finally:
                 self.board.unmake_move(undo)  # also runs when a timeout unwinds the search
 
+            scores[move] = score
             if score > best_score:
                 best_score = score
                 best_move = move
                 self._root_best = (best_move, best_score)
             alpha = max(alpha, score)
+
+        self._root_scores = scores
 
         if best_move is not None:
             self._tt_store(self.board.zobrist_hash(), depth, best_score, TT_EXACT, best_move)
