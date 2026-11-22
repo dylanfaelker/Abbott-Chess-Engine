@@ -271,10 +271,9 @@ class Search:
             if alpha >= beta: # beta-cutoff -> killer move
 
                 if move.flag not in CAPTURE_FLAGS: # killer moves are only "quiet" moves
-                    if alpha >= MATE_BOUND: # Mate killer
-                        self.mate_killers[ply][1] = self.mate_killers[ply][0]
-                        self.mate_killers[ply][0] = move
-                    elif self.killer_moves[0] != move:
+                    if score >= MATE_BOUND: # Mate killer
+                        self.mate_killers[ply] = move
+                    elif self.killer_moves[ply][0] != move:
                         self.killer_moves[ply][1] = self.killer_moves[ply][0]
                         self.killer_moves[ply][0] = move
 
@@ -462,7 +461,7 @@ class Search:
 
             # History Hueristic
             else:
-                self.history[self._hist_index(board, move)]
+                score = self.history[self._hist_index(board, move)]
 
             scored.append((score, move))
 
