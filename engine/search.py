@@ -459,9 +459,13 @@ class Search:
                 else:
                     score = PROMOTION_HUERISTIC_MAX - 3
 
-            # History Hueristic
             else:
+                # History Hueristic
                 score = self.history[self._hist_index(board, move)]
+
+                # Advancement Hueristic
+                advancement = move.to_sq.rank if board.turn is Colour.WHITE else board.ranks - 1 - move.to_sq.rank
+                score += advancement
 
             scored.append((score, move))
 
