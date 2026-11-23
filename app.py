@@ -111,8 +111,9 @@ def get_move():
         return jsonify({
             "move": best_move.to_uci(),
             "eval": score / 100.0,
-            "depth": searcher.depth_reached,
+            "depth_reached": searcher.depth_reached,
             "engine": engine,
+            "time_limit_used": time_limit
         }), 200
  
     except Exception as e:
