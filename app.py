@@ -13,6 +13,11 @@ from infinity_chess.rules import InfinityChessRules
 from engine.search import Search
 from engine_v2_1.search import Search as Search_v2_1
 from engine_v2_2.search import Search as Search_v2_2
+from engine_v2_3.search import Search as Search_v2_3
+from engine_v2_4.search import Search as Search_v2_4
+from engine_v2_5.search import Search as Search_v2_5
+from engine_v2_6.search import Search as Search_v2_6
+from engine_v2_7.search import Search as Search_v2_7
 
 app = Flask(__name__)
 CORS(app, origins=["https://www.dylanfaelker.com", "http://localhost:3000"])
@@ -37,9 +42,10 @@ def get_move():
     Get the engine's best move for a given position.
 
     Request body:
-        fen    (str):  FEN string of the current position
-        depth  (int):  Search depth (default: 2, max: 8). Higher = stronger but slower.
-        engine (str):  Engine version (defaults to latest engine).
+        fen    (str):       FEN string of the current position
+        depth  (int):       Search depth (default: 2, max: 8). Higher = stronger but slower.
+        time_limit (float): Optional soft limit in seconds (max 10). With no depth, searches as deep as the time allows.
+        engine (str):       Engine version (defaults to latest engine).
 
     Response:
         move   (str):   Best move in UCI format e.g. "e2e4", "e7e8q"
@@ -62,11 +68,10 @@ def get_move():
  
     fen = data["fen"]
 
-    depth = int(data.get("depth", 2))
-    depth = max(1, min(depth, 8))
-
-    # TODO add as API param
-    time_limit = 10.0
+    depth = int(data.get("depth", 64))
+    depth = max(1, min(depth, 64))
+    time_limit = int(data.get("time_limit", 1))
+    time_limit = max(0, min(time_limit, 10))
  
     try:
         board = Board.from_fen(fen)
@@ -79,8 +84,17 @@ def get_move():
         searcher = Search_v2_1(board, InfinityChessRules())
     elif engine == "v2.2":
         searcher = Search_v2_2(board, InfinityChessRules())
+    elif engine == "v2.3":
+        searcher = Search_v2_3(board, InfinityChessRules())
+    elif engine == "v2.4":
+        searcher = Search_v2_4(board, InfinityChessRules())
+    elif engine == "v2.5":
+        searcher = Search_v2_5(board, InfinityChessRules())
+    elif engine == "v2.6":
+        searcher = Search_v2_6(board, InfinityChessRules())
+    elif engine == "v2.7":
+        searcher = Search_v2_7(board, InfinityChessRules())
     else:
-        engine = "v2.3"
         searcher = Search(board, InfinityChessRules())
  
     gen = MoveGenerator(board, InfinityChessRules())
